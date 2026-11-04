@@ -111,23 +111,31 @@ public class ApiCredentials {
         }
     }
 
+    /** The public sample credentials Telegram ships in its source tree. Never used. */
+    private static final int SAMPLE_APP_ID = 6;
+    private static final String SAMPLE_APP_HASH = "eb06d4abfb49dc3eeb1aeb98ae0f581e";
+
+    public static boolean isCompiledSample(int id, String hash) {
+        return id == SAMPLE_APP_ID && SAMPLE_APP_HASH.equals(hash);
+    }
+
     /**
-     * True when the app has no logged-in account and no usable custom credentials:
-     * the first-launch setup screen must run before any account or network service
-     * starts, so the client never connects with the compiled-in sample credentials.
+     * True while the client has no usable Telegram API credentials of its own: the
+     * first-launch setup screen must run before any account or network service
+     * starts. There is deliberately NO existing-account exemption: an account whose
+     * stored credential blob was lost (device transfer, key invalidation) must be
+     * re-collected through setup, never silently run on the compiled-in sample keys.
+     * Account state is irrelevant here, so nothing depends on pre-init config loads.
      */
     public static boolean needsSetup(Context context) {
-        try {
-            if (UserConfig.getActivatedAccountsCount() > 0) {
-                return false;
-            }
-        } catch (Throwable t) {
-            // Account state unreadable pre-init: treat as fresh install, gate stays up.
+        if (NekoXConfig.customApi == NekoXConfig.API_TYPE_CUSTOM) {
+            return NekoXConfig.customAppId <= 0 || loadHash(context).isEmpty();
         }
-        if (NekoXConfig.customApi != NekoXConfig.API_TYPE_CUSTOM) {
-            return true;
-        }
-        return NekoXConfig.customAppId <= 0 || loadHash(context).isEmpty();
+        // API_TYPE_DEFAULT: only acceptable when the build itself carries real,
+        // user-supplied credentials (LOCAL_PROPERTIES at build time); the public
+        // sample keys compiled into the source tree never count as configured.
+        // Read BuildConfig directly - currentAppId() fail-closes the sample to 0.
+        return isCompiledSample(BuildConfig.APP_ID, BuildConfig.APP_HASH);
     }
 
     private static SharedPreferences prefs(Context context) {

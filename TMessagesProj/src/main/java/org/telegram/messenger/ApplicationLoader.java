@@ -422,8 +422,12 @@ public class ApplicationLoader extends Application {
         }
 
         LauncherIconController.tryFixLauncherIconIfNeeded();
-        ProxyRotationController.init();
-        ProxyPingController.init();
+        // Roidgram first-launch gate: these schedule ConnectionsManager calls
+        // (proxy ping/rotation) - never start them before credentials are set up.
+        if (!ApiCredentials.needsSetup(applicationContext)) {
+            ProxyRotationController.init();
+            ProxyPingController.init();
+        }
     }
 
     private static void installPluginCrashHandler() {
@@ -545,6 +549,11 @@ public class ApplicationLoader extends Application {
     }
 
     private static void startPushServiceInternal() {
+        // Roidgram first-launch gate: no push connection before credentials exist
+        // (reached e.g. via AppStartReceiver BOOT_COMPLETED on a fresh device).
+        if (applicationContext != null && ApiCredentials.needsSetup(applicationContext)) {
+            return;
+        }
         if (PushListenerController.getProvider().hasServices()) {
             return;
         }

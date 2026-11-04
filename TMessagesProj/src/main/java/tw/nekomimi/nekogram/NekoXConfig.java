@@ -49,10 +49,17 @@ public class NekoXConfig {
     public static String customAppHash = org.telegram.messenger.ApiCredentials.loadHash(ApplicationLoader.applicationContext);
 
     public static int currentAppId() {
-        return switch (customApi) {
+        int id = switch (customApi) {
             case API_TYPE_CUSTOM -> customAppId;
             default -> BuildConfig.APP_ID;
         };
+        // Fail closed: the public sample credentials compiled into the source are
+        // never handed to the connection layer; id 0 makes Telegram reject the
+        // request instead of connecting under someone else's identity.
+        if (org.telegram.messenger.ApiCredentials.isCompiledSample(id, currentAppHash())) {
+            return 0;
+        }
+        return id;
     }
 
     public static String currentAppHash() {
