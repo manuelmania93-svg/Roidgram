@@ -43,7 +43,18 @@ tap_on "save and continue"
 sleep 18
 RESUMED=$(adb shell "dumpsys activity activities | grep ResumedActivity")
 echo "$RESUMED"
-echo "$RESUMED" | grep -q "ApiSetupActivity" && { echo "setup shown again after credentials saved - gate failed"; exit 1; }
+if echo "$RESUMED" | grep -q "ApiSetupActivity"; then
+  # Evidence on failure: the re-shown setup screen discriminates the cause.
+  # Prefilled api_id => custom_app_id survived (keystore/decrypt side failed).
+  # Empty fields + no error => persistence lost (apply()+exit race) or save tap missed.
+  # Error text present => validation rejected the fixture input.
+  adb exec-out screencap -p > /tmp/after-save-fail.png || true
+  adb shell uiautomator dump /sdcard/ui-fail.xml >/dev/null
+  adb pull /sdcard/ui-fail.xml /tmp/after-save-fail.xml >/dev/null 2>&1 || true
+  adb logcat -d > /tmp/logcat.txt || true
+  echo "setup shown again after credentials saved - gate failed"
+  exit 1
+fi
 echo "$RESUMED" | grep -q "LoginActivity" || { echo "expected LoginActivity after gate passed"; exit 1; }
 adb exec-out screencap -p > /tmp/after-save.png
 [ -s /tmp/after-save.png ] || { echo "no after-save screenshot"; exit 1; }
