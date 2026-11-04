@@ -22,10 +22,10 @@ import tw.nekomimi.nekogram.NekoXConfig;
  *
  * The user's own Telegram api_id/api_hash (created at my.telegram.org) are entered
  * once in ApiSetupActivity before the normal phone-number/code login. The api_hash
- * is stored AES/GCM-encrypted with an AndroidKeyStore-backed key (keys never leave
- * the device's keystore and are excluded from backups and device transfers). The
- * existing BackupAgent only registers saved_tokens helpers, so neither the encrypted
- * blob nor the nekox_config preferences participate in cloud backup or D2D transfer.
+ * is stored AES/GCM-encrypted with an AndroidKeyStore-backed key (keystore keys are
+ * non-exportable by design). System backup goes through a BackupAgent that only
+ * registers saved_tokens helpers; OEM device-transfer tools may copy app data
+ * outside that channel, so no cross-device confidentiality claim is made.
  * The hash is never logged.
  */
 public class ApiCredentials {

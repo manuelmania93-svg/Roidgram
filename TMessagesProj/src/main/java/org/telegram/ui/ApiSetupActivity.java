@@ -61,7 +61,7 @@ public class ApiSetupActivity extends Activity {
                 + "2. Open \"API development tools\" and create an application.\n"
                 + "3. Enter the api_id and api_hash below, then continue to the normal login.\n\n"
                 + "The api_hash is stored encrypted on this device (Android Keystore); the api_id is kept in the app's private settings.\n\n"
-                + "Roidgram uses them only to connect to Telegram, like any Telegram app. They are not included in Android backups, so a new device will ask for them again.");
+                + "Roidgram uses them only to connect to Telegram, like any Telegram app.");
         info.setTextSize(15);
         info.setPadding(0, dp(12), 0, dp(16));
         root.addView(info);
