@@ -22,10 +22,33 @@ tap_on_edit() {
   python3 "$DIR/tap.py" /tmp/ui.xml "$1" edit
 }
 
+# The 320x640 emulator screen puts later fields and the save button under the
+# soft keyboard once typing starts, so coordinate taps land on the keyboard.
+# Focus navigation is used instead: one coordinate tap for the first field,
+# then KEYCODE_TAB between nodes, verifying the focused node after each move.
+focus_node() {
+  local hint="$1"
+  for attempt in 1 2 3 4; do
+    if [ "$attempt" -eq 1 ]; then
+      tap_on_edit "$hint" || tap_on "$hint" || true
+    else
+      adb shell input keyevent KEYCODE_TAB
+    fi
+    sleep 1
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+    adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+    if python3 "$DIR/focuscheck.py" /tmp/ui.xml "$hint"; then return 0; fi
+  done
+  adb exec-out screencap -p > /tmp/field-fail.png || true
+  cp /tmp/ui.xml /tmp/field-fail.xml || true
+  echo "could not focus '$hint'"
+  exit 1
+}
+
 set_field() {
   local hint="$1" value="$2"
   for attempt in 1 2 3; do
-    tap_on_edit "$hint" || tap_on "$hint"
+    focus_node "$hint"
     adb shell input keyevent KEYCODE_MOVE_END
     for i in $(seq 64); do adb shell input keyevent KEYCODE_DEL; done
     adb shell input text "$value"
@@ -40,10 +63,15 @@ set_field() {
   exit 1
 }
 
+press_button() {
+  focus_node "$1"
+  adb shell input keyevent KEYCODE_ENTER
+}
+
 echo "== negative validation: bad hash rejected =="
 set_field "api_id" "123456"
 set_field "api_hash" "xyz"
-tap_on "save and continue"
+press_button "save and continue"
 sleep 2
 adb shell uiautomator dump /sdcard/ui.xml >/dev/null
 adb pull /sdcard/ui.xml /tmp/ui-invalid.xml >/dev/null 2>&1
@@ -61,7 +89,7 @@ adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
 sleep 15
 set_field "api_id" "123456"
 set_field "api_hash" "0123456789abcdef0123456789abcdef"
-tap_on "save and continue"
+press_button "save and continue"
 sleep 18
 RESUMED=$(adb shell "dumpsys activity activities | grep ResumedActivity")
 echo "$RESUMED"
