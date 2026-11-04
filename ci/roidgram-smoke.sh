@@ -88,6 +88,44 @@ adb shell am force-stop $PKG
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
 sleep 15
 set_field "api_id" "123456"
+
+echo "== touch-access probe: hash field reachable with keyboard open (tap, then scroll+tap) =="
+# With the IME open after typing api_id, check whether ordinary touch can reach
+# the api_hash field at 320x640: direct coordinate tap first, then a scroll
+# swipe in the content area above the keyboard and a second tap. Result is
+# reported either way; failure captures pixels and the dump for layout fixes.
+touch_access="inaccessible"
+adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+if XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "api_hash"); then
+  adb shell input tap $XY
+  sleep 1
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+  adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+  if python3 "$DIR/focuscheck.py" /tmp/ui.xml "api_hash"; then
+    touch_access="direct-tap"
+  else
+    adb shell input swipe 160 350 160 250 300
+    sleep 1
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+    adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+    if XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "api_hash"); then
+      adb shell input tap $XY
+      sleep 1
+      adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+      adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+      if python3 "$DIR/focuscheck.py" /tmp/ui.xml "api_hash"; then
+        touch_access="scroll-then-tap"
+      fi
+    fi
+  fi
+fi
+echo "touch access to api_hash with IME open: $touch_access"
+if [ "$touch_access" = "inaccessible" ]; then
+  adb exec-out screencap -p > /tmp/touch-access-fail.png || true
+  cp /tmp/ui.xml /tmp/touch-access-fail.xml || true
+fi
+
 set_field "api_hash" "0123456789abcdef0123456789abcdef"
 press_button "save and continue"
 sleep 18
