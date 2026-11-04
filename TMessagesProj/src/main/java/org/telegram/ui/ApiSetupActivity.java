@@ -16,6 +16,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.view.WindowInsetsControllerCompat;
+
 import org.telegram.messenger.ApiCredentials;
 
 import tw.nekomimi.nekogram.NekoXConfig;
@@ -43,6 +45,11 @@ public class ApiSetupActivity extends Activity {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(scroll);
 
+        // Light screen, so status bar icons must be dark: SDK 35 enforces
+        // edge-to-edge and otherwise draws them white on this light background.
+        new WindowInsetsControllerCompat(getWindow(), getWindow().getDecorView())
+                .setAppearanceLightStatusBars(true);
+
         TextView title = new TextView(this);
         title.setText("Roidgram setup");
         title.setTextSize(22);
@@ -53,7 +60,8 @@ public class ApiSetupActivity extends Activity {
                 + "1. Open https://my.telegram.org and sign in with your Telegram account.\n"
                 + "2. Open \"API development tools\" and create an application.\n"
                 + "3. Enter the api_id and api_hash below, then continue to the normal login.\n\n"
-                + "They stay on this device and are never shared.");
+                + "The api_hash is stored encrypted on this device (Android Keystore); the api_id is kept in the app's private settings.\n\n"
+                + "Roidgram uses them only to connect to Telegram, like any Telegram app. They are not included in Android backups, so a new device will ask for them again.");
         info.setTextSize(15);
         info.setPadding(0, dp(12), 0, dp(16));
         root.addView(info);

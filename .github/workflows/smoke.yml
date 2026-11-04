@@ -10,6 +10,9 @@ jobs:
     name: Emulator smoke test (no credentials)
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v4
+      - name: Install Pillow for the status-bar contrast check
+        run: python3 -m pip install --break-system-packages pillow
       - uses: actions/download-artifact@v4
         with:
           name: roidgram-staging
@@ -31,19 +34,14 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
-          script: >-
-            adb install -r /tmp/roidgram.apk &&
-            adb shell monkey -p fork.risin42.nagramx -c android.intent.category.LAUNCHER 1 &&
-            sleep 25 &&
-            adb exec-out screencap -p > /tmp/setup-screen.png;
-            adb logcat -d > /tmp/logcat.txt || true;
-            if grep -q "FATAL EXCEPTION" /tmp/logcat.txt; then echo "App crashed before setup"; exit 1; fi;
-            echo "No crash; setup screen screenshot captured"
+          script: bash "$GITHUB_WORKSPACE/ci/roidgram-smoke.sh"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: smoke-artifacts
           path: |
             /tmp/setup-screen.png
+            /tmp/invalid.png
+            /tmp/after-save.png
             /tmp/logcat.txt
           if-no-files-found: warn
