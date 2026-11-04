@@ -31,15 +31,13 @@ jobs:
           api-level: 35
           target: google_apis
           arch: x86_64
-          script: |
-            APK=/tmp/roidgram.apk
-            echo "Installing $APK"
-            adb install -r "$APK"
-            adb shell monkey -p fork.risin42.nagramx -c android.intent.category.LAUNCHER 1
-            sleep 25
-            adb exec-out screencap -p > /tmp/setup-screen.png
-            adb logcat -d > /tmp/logcat.txt || true
-            if grep -q "FATAL EXCEPTION" /tmp/logcat.txt; then echo "App crashed before setup"; exit 1; fi
+          script: >-
+            adb install -r /tmp/roidgram.apk &&
+            adb shell monkey -p fork.risin42.nagramx -c android.intent.category.LAUNCHER 1 &&
+            sleep 25 &&
+            adb exec-out screencap -p > /tmp/setup-screen.png;
+            adb logcat -d > /tmp/logcat.txt || true;
+            if grep -q "FATAL EXCEPTION" /tmp/logcat.txt; then echo "App crashed before setup"; exit 1; fi;
             echo "No crash; setup screen screenshot captured"
       - uses: actions/upload-artifact@v4
         if: always()
