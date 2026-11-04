@@ -45,6 +45,8 @@ jobs:
             /tmp/after-save.png
             /tmp/after-save-fail.png
             /tmp/after-save-fail.xml
+            /tmp/field-fail.png
+            /tmp/field-fail.xml
             /tmp/logcat.txt
             /tmp/logcat.txt
           if-no-files-found: warn

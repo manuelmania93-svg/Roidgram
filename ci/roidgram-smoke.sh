@@ -16,16 +16,40 @@ tap_on() {
   python3 "$DIR/tap.py" /tmp/ui.xml "$1"
 }
 
+tap_on_edit() {
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+  adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+  python3 "$DIR/tap.py" /tmp/ui.xml "$1" edit
+}
+
+set_field() {
+  local hint="$1" value="$2"
+  for attempt in 1 2 3; do
+    tap_on_edit "$hint" || tap_on "$hint"
+    adb shell input keyevent KEYCODE_MOVE_END
+    for i in $(seq 64); do adb shell input keyevent KEYCODE_DEL; done
+    adb shell input text "$value"
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+    adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+    if python3 "$DIR/fieldcheck.py" /tmp/ui.xml "$value"; then return 0; fi
+    echo "field '$hint' did not hold the intended value after attempt $attempt"
+  done
+  adb exec-out screencap -p > /tmp/field-fail.png || true
+  cp /tmp/ui.xml /tmp/field-fail.xml || true
+  echo "could not set field '$hint' deterministically"
+  exit 1
+}
+
 echo "== negative validation: bad hash rejected =="
-tap_on "api_id"
-adb shell input text "123456"
-tap_on "api_hash"
-adb shell input text "xyz"
+set_field "api_id" "123456"
+set_field "api_hash" "xyz"
 tap_on "save and continue"
 sleep 2
 adb shell uiautomator dump /sdcard/ui.xml >/dev/null
 adb pull /sdcard/ui.xml /tmp/ui-invalid.xml >/dev/null 2>&1
 grep -q "32 hexadecimal" /tmp/ui-invalid.xml || { echo "validation error text not shown"; exit 1; }
+python3 "$DIR/fieldcheck.py" /tmp/ui-invalid.xml "123456" || { echo "api_id field lost its value during negative test"; exit 1; }
+python3 "$DIR/fieldcheck.py" /tmp/ui-invalid.xml "xyz" || { echo "bad hash never reached the hash field - negative test vacuous"; exit 1; }
 RESUMED=$(adb shell "dumpsys activity activities | grep ResumedActivity")
 echo "$RESUMED"
 echo "$RESUMED" | grep -q "ApiSetupActivity" || { echo "setup not still in foreground after rejected input"; exit 1; }
@@ -35,10 +59,8 @@ echo "== save valid-format dummy fixture -> restart -> gate must pass =="
 adb shell am force-stop $PKG
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
 sleep 15
-tap_on "api_id"
-adb shell input text "123456"
-tap_on "api_hash"
-adb shell input text "0123456789abcdef0123456789abcdef"
+set_field "api_id" "123456"
+set_field "api_hash" "0123456789abcdef0123456789abcdef"
 tap_on "save and continue"
 sleep 18
 RESUMED=$(adb shell "dumpsys activity activities | grep ResumedActivity")
