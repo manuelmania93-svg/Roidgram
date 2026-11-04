@@ -108,6 +108,7 @@ import com.google.common.primitives.Longs;
 // import com.google.firebase.appindexing.builders.AssistActionBuilder;
 
 import org.telegram.PhoneFormat.PhoneFormat;
+import org.telegram.messenger.ApiCredentials;
 import org.telegram.messenger.AccountInstance;
 import org.telegram.messenger.AndroidUtilities;
 import org.telegram.messenger.AnimationNotificationsLocker;
@@ -461,6 +462,15 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
+        // Roidgram first-launch gate: collect the user's own Telegram API credentials
+        // before any Telegram UI or account/network service starts. postInitApplication
+        // below is gated on the same condition, so nothing connects with sample keys.
+        if (ApiCredentials.needsSetup(this)) {
+            super.onCreate(savedInstanceState);
+            startActivity(new Intent(this, ApiSetupActivity.class));
+            finish();
+            return;
+        }
         isActive = true;
         activeInstanceCount++;
         if (BuildVars.DEBUG_VERSION) {

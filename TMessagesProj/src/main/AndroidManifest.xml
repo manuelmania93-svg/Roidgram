@@ -127,6 +127,11 @@
     >
         <!-- usesCleartextTraffic for browser supporting opening http:// links -->
 
+        <activity
+            android:name="org.telegram.ui.ApiSetupActivity"
+            android:exported="false"
+            android:theme="@android:style/Theme.Material.Light.NoActionBar" />
+
         <activity-alias
             android:enabled="false"
             android:name="org.telegram.messenger.DefaultIcon"

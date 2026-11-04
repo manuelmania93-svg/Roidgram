@@ -44,7 +44,9 @@ public class NekoXConfig {
 
     public static int customApi = preferences.getInt("custom_api", 0);
     public static int customAppId = preferences.getInt("custom_app_id", 0);
-    public static String customAppHash = preferences.getString("custom_app_hash", "");
+    // Roidgram: the hash lives AES/GCM-encrypted behind AndroidKeyStore
+    // (ApiCredentials); only the non-secret api id stays in plaintext prefs.
+    public static String customAppHash = org.telegram.messenger.ApiCredentials.loadHash(ApplicationLoader.applicationContext);
 
     public static int currentAppId() {
         return switch (customApi) {
@@ -64,7 +66,6 @@ public class NekoXConfig {
         preferences.edit()
                 .putInt("custom_api", customApi)
                 .putInt("custom_app_id", customAppId)
-                .putString("custom_app_hash", customAppHash)
                 .apply();
     }
 

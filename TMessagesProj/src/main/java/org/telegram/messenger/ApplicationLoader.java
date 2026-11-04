@@ -241,6 +241,12 @@ public class ApplicationLoader extends Application {
         if (applicationInited || applicationContext == null) {
             return;
         }
+        // Roidgram first-launch gate: until the user has entered their own Telegram
+        // API credentials (or already has an account), no account or network service
+        // may start, so the client never connects with the compiled-in sample keys.
+        if (ApiCredentials.needsSetup(applicationContext)) {
+            return;
+        }
         applicationInited = true;
         NativeLoader.initNativeLibs(ApplicationLoader.applicationContext);
         try {
