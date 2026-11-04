@@ -1,0 +1,51 @@
+name: Roidgram smoke (reuse build artifact)
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Workflow run id whose roidgram-staging artifact to smoke test'
+        required: true
+jobs:
+  smoke:
+    name: Emulator smoke test (no credentials)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: roidgram-staging
+          path: apk
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stage APK at absolute path
+        run: |
+          APK=$(find apk -name '*universal*.apk' | head -1); [ -z "$APK" ] && APK=$(find apk -name '*x86_64*.apk' | head -1)
+          [ -z "$APK" ] && { echo "no APK found in artifact"; exit 1; }
+          cp "$APK" /tmp/roidgram.apk && ls -la /tmp/roidgram.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          script: |
+            APK=/tmp/roidgram.apk
+            echo "Installing $APK"
+            adb install -r "$APK"
+            adb shell monkey -p fork.risin42.nagramx -c android.intent.category.LAUNCHER 1
+            sleep 25
+            adb exec-out screencap -p > /tmp/setup-screen.png
+            adb logcat -d > /tmp/logcat.txt || true
+            if grep -q "FATAL EXCEPTION" /tmp/logcat.txt; then echo "App crashed before setup"; exit 1; fi
+            echo "No crash; setup screen screenshot captured"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-artifacts
+          path: |
+            /tmp/setup-screen.png
+            /tmp/logcat.txt
+          if-no-files-found: warn
