@@ -239,12 +239,9 @@ android {
     }
 
     signingConfigs {
-        release {
-            storeFile project.file('release.keystore')
-            storePassword keystorePwd
-            keyAlias alias
-            keyPassword pwd
-        }
+        // Roidgram stock test builds: temporary debug signature only (user-approved).
+        // Upstream's release.keystore is removed from this repo and never used;
+        // a real release identity requires the user's explicit approval first.
     }
 
     buildTypes {
@@ -253,7 +250,7 @@ android {
             debuggable = true
             jniDebuggable = false
             multiDexEnabled = true
-            signingConfig = signingConfigs.release
+            signingConfig = signingConfigs.debug
         }
 
         staging {
@@ -264,7 +261,7 @@ android {
             multiDexEnabled = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             matchingFallbacks = ['release', 'staging', 'debug']
-            signingConfig = signingConfigs.release
+            signingConfig = signingConfigs.debug
         }
 
         release {
@@ -275,7 +272,7 @@ android {
             multiDexEnabled = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             matchingFallbacks = ['release', 'staging', 'debug']
-            signingConfig = signingConfigs.release
+            signingConfig = signingConfigs.debug
         }
     }
 

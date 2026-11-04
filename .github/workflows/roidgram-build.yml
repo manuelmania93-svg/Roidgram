@@ -1,0 +1,47 @@
+name: Roidgram build
+
+on:
+  push:
+    branches:
+      - base/nagramxf-stock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    name: Gradle Build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Set up Android SDK Tools
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "build-tools;36.0.0 ndk;27.2.12479018 platforms;android-36"
+      - name: Set up Python (Chaquopy bridge source build)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.9'
+      - name: Install Cython (Chaquopy bridge source build)
+        run: pip install Cython==3.0.11
+      - name: Configure Android SDK Path
+        run: echo "sdk.dir=${ANDROID_HOME}" >> local.properties
+      - name: Build (staging, debug-signed)
+        run: ./gradlew TMessagesProj:assembleNormalStaging
+      - uses: actions/upload-artifact@v4
+        with:
+          name: roidgram-staging
+          path: TMessagesProj/build/outputs/apk/normal/staging/
+          if-no-files-found: error
