@@ -468,6 +468,8 @@ public class LaunchActivity extends BasePermissionsActivity implements INavigati
         // below is gated on the same condition, so nothing connects with sample keys.
         if (ApiCredentials.needsSetup(this)) {
             super.onCreate(savedInstanceState);
+            isActive = true;
+            activeInstanceCount++;
             startActivity(new Intent(this, ApiSetupActivity.class));
             finish();
             return;
