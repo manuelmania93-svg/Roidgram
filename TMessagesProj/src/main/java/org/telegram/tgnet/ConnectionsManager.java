@@ -230,6 +230,13 @@ public class ConnectionsManager extends BaseController {
 
     public ConnectionsManager(int instance) {
         super(instance);
+        if (org.telegram.messenger.ApiCredentials.needsSetup(ApplicationLoader.applicationContext)) {
+            // Roidgram: until the user supplies valid API credentials, this
+            // instance must not touch native code or the network at all -
+            // no native_init, not even a request the server would reject.
+            FileLog.w("ConnectionsManager blocked: API credentials not set up");
+            return;
+        }
         connectionState = native_getConnectionState(currentAccount);
         String deviceModel;
         String systemLangCode;
