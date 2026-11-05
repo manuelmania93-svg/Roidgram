@@ -7817,6 +7817,24 @@ public class AlertsCreator {
         void didPressedNewCard();
     }
 
+    // Roidgram: bulk-delete vectors are server-capped (Telegram Bot API documents 1-100 ids per
+    // deleteMessages call; the client forward path chunks at 100 in SendMessagesHelper). A selection
+    // raised to 10k must never send one oversized request: chunk into sequential 100-id deletes.
+    // Secret-chat random_ids subsets are not positionally paired with ids, so encrypted chats pass
+    // through unchanged (legacy behavior, capped selections were equally possible there).
+    private static final int DELETE_MESSAGES_CHUNK_SIZE = 100;
+
+    private static void deleteMessagesChunked(MessagesController controller, ArrayList<Integer> ids, ArrayList<Long> randomIds, TLRPC.EncryptedChat encryptedChat, long dialogId, int topicId, boolean forAll, int mode) {
+        if (encryptedChat != null || ids == null || ids.size() <= DELETE_MESSAGES_CHUNK_SIZE) {
+            controller.deleteMessages(ids, randomIds, encryptedChat, dialogId, topicId, forAll, mode);
+            return;
+        }
+        for (int from = 0; from < ids.size(); from += DELETE_MESSAGES_CHUNK_SIZE) {
+            int to = Math.min(from + DELETE_MESSAGES_CHUNK_SIZE, ids.size());
+            controller.deleteMessages(new ArrayList<>(ids.subList(from, to)), null, null, dialogId, topicId, forAll, mode);
+        }
+    }
+
     public static void createDeleteMessagesAlert(BaseFragment fragment, TLRPC.User user, TLRPC.Chat chat, TLRPC.EncryptedChat encryptedChat, TLRPC.ChatFull chatInfo, long mergeDialogId, MessageObject selectedMessage, SparseArray<MessageObject>[] selectedMessages, MessageObject.GroupedMessages selectedGroup, int topicId, int mode, TLRPC.ChannelParticipant[] channelParticipants, Runnable onDelete, Runnable hideDim, Theme.ResourcesProvider resourcesProvider) {
         final boolean scheduled = mode == ChatActivity.MODE_SCHEDULED;
         final boolean isSavedMessages = mode == ChatActivity.MODE_SAVED;
@@ -7930,7 +7948,7 @@ public class AlertsCreator {
                             if (mergeDialogId != 0 && selectedMessage.messageOwner.peer_id != null && selectedMessage.messageOwner.peer_id.chat_id == -mergeDialogId) {
                                 thisDialogId = mergeDialogId;
                             }
-                            MessagesController.getInstance(currentAccount).deleteMessages(ids, random_ids, encryptedChat, thisDialogId, topicId, true, mode);
+                            deleteMessagesChunked(MessagesController.getInstance(currentAccount), ids, random_ids, encryptedChat, thisDialogId, topicId, true, mode);
                         } else {
                             for (int a = 1; a >= 0; a--) {
                                 ids = new ArrayList<>();
@@ -7947,7 +7965,7 @@ public class AlertsCreator {
                                         }
                                     }
                                 }
-                                MessagesController.getInstance(currentAccount).deleteMessages(ids, random_ids, encryptedChat, (a == 1 && mergeDialogId != 0) ? mergeDialogId : thisDialogId, topicId, true, mode);
+                                deleteMessagesChunked(MessagesController.getInstance(currentAccount), ids, random_ids, encryptedChat, (a == 1 && mergeDialogId != 0) ? mergeDialogId : thisDialogId, topicId, true, mode);
                                 selectedMessages[a].clear();
                             }
                         }
@@ -8317,7 +8335,7 @@ public class AlertsCreator {
                 }
                 // --- AyuGram hook
                 if (!ids.isEmpty()) {
-                    MessagesController.getInstance(currentAccount).deleteMessages(ids, random_ids, encryptedChat, thisDialogId, topicId, deleteForAll[0], mode);
+                    deleteMessagesChunked(MessagesController.getInstance(currentAccount), ids, random_ids, encryptedChat, thisDialogId, topicId, deleteForAll[0], mode);
                 }
                 for (MessageObject msg: ephemeralMessages) {
                     MessagesController.getInstance(currentAccount).deleteEphemeralMessage(thisDialogId, topicId, msg);
@@ -8356,7 +8374,7 @@ public class AlertsCreator {
                         });
                     }
                     // --- AyuGram hook
-                    MessagesController.getInstance(currentAccount).deleteMessages(ids, random_ids, encryptedChat, (a == 1 && mergeDialogId != 0) ? mergeDialogId : thisDialogId, topicId, deleteForAll[0], mode);
+                    deleteMessagesChunked(MessagesController.getInstance(currentAccount), ids, random_ids, encryptedChat, (a == 1 && mergeDialogId != 0) ? mergeDialogId : thisDialogId, topicId, deleteForAll[0], mode);
                     selectedMessages[a].clear();
                 }
             }

@@ -20709,15 +20709,16 @@ public class ChatActivity extends BaseFragment implements
         }
     }
 
-    // Roidgram: select all loaded messages strictly inside the active range (all types except service/error, parity with manual multi-select)
-    private void selectBetweenAddLoadedInRange() {
+    // Roidgram: selection decisions live in SelectBetweenPlanner (CI unit-tested); this pass only
+    // pre-filters candidates (same type filter as upstream: skip service/invalid/send-error; the old
+    // "media-only" reading was wrong - getMessageType defaults plain text to MESSAGE_TYPE_MEDIA) and
+    // applies the planner's id list. Action-mode UI updates once per pass, not per message.
+    private boolean selectBetweenAddLoadedInRange() {
+        ArrayList<Integer> candidates = new ArrayList<>();
         for (int i = 0; i < messages.size(); i++) {
             MessageObject message = messages.get(i);
             int msgId = message.getId();
             if (msgId <= selectBetweenBegin || msgId >= selectBetweenEnd) {
-                continue;
-            }
-            if (selectedMessagesIds[0].indexOfKey(msgId) >= 0 || selectedMessagesIds[1].indexOfKey(msgId) >= 0) {
                 continue;
             }
             if (AyuFilter.shouldHideIgnoredBlockedMessages() && AyuFilter.isIgnoredBlockedMessage(message)) {
@@ -20740,20 +20741,44 @@ public class ChatActivity extends BaseFragment implements
             if (type == MESSAGE_TYPE_INVALID || type == MESSAGE_TYPE_SERVICE || type == MESSAGE_TYPE_SEND_ERROR_TEXT) {
                 continue;
             }
-            if (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() >= MAX_SELECTED_MESSAGES) {
-                AndroidUtilities.shakeView(selectedMessagesCountTextView);
-                Vibrator vibrator = (Vibrator) ApplicationLoader.applicationContext.getSystemService(Context.VIBRATOR_SERVICE);
-                if (vibrator != null) {
-                    vibrator.vibrate(200);
-                }
-                selectBetweenLoading = false;
-                return;
-            }
-            addToSelectedMessages(message, true);
+            candidates.add(msgId);
         }
+        Collections.sort(candidates);
+        HashSet<Integer> alreadySelected = new HashSet<>();
+        for (int a = 0; a < 2; a++) {
+            for (int b = 0; b < selectedMessagesIds[a].size(); b++) {
+                alreadySelected.add(selectedMessagesIds[a].keyAt(b));
+            }
+        }
+        kotlin.Pair<java.util.List<Integer>, Boolean> result = SelectBetweenPlanner.INSTANCE.addPass(candidates, alreadySelected, alreadySelected.size(), MAX_SELECTED_MESSAGES);
+        java.util.List<Integer> toAdd = result.getFirst();
+        for (int i = 0; i < toAdd.size(); i++) {
+            MessageObject mo = messagesDict[0].get(toAdd.get(i));
+            if (mo == null) {
+                for (int j = 0; j < messages.size(); j++) {
+                    if (messages.get(j).getId() == toAdd.get(i)) {
+                        mo = messages.get(j);
+                        break;
+                    }
+                }
+            }
+            if (mo != null) {
+                addToSelectedMessages(mo, true, i == toAdd.size() - 1);
+            }
+        }
+        if (result.getSecond()) {
+            AndroidUtilities.shakeView(selectedMessagesCountTextView);
+            Vibrator vibrator = (Vibrator) ApplicationLoader.applicationContext.getSystemService(Context.VIBRATOR_SERVICE);
+            if (vibrator != null) {
+                vibrator.vibrate(200);
+            }
+            selectBetweenLoading = false;
+        }
+        return result.getSecond();
     }
 
-    // Roidgram: walk older pages (same load_type=1 pipeline as scroll-up) until the range is fully loaded or history ends
+    // Roidgram: walk older pages (same load_type=1 pipeline as scroll-up) until the range is fully
+    // loaded or a planner stop condition hits (complete / history end / cap / no progress).
     private void continueSelectBetweenLoad() {
         if (!selectBetweenLoading) {
             return;
@@ -20762,26 +20787,28 @@ public class ChatActivity extends BaseFragment implements
             selectBetweenLoading = false;
             return;
         }
-        selectBetweenAddLoadedInRange();
+        boolean capHit = selectBetweenAddLoadedInRange();
         updateActionModeTitle();
         updateVisibleRows();
-        if (!selectBetweenLoading) {
-            return;
-        }
-        int cursor = Integer.MAX_VALUE;
-        int cursorDate = 0;
+        ArrayList<Integer> loadedInRange = new ArrayList<>();
         for (MessageObject message : messages) {
             int msgId = message.getId();
-            if (msgId > 0 && msgId <= selectBetweenEnd && msgId < cursor) {
-                cursor = msgId;
-                cursorDate = message.messageOwner != null ? message.messageOwner.date : 0;
+            if (msgId > 0 && msgId <= selectBetweenEnd) {
+                loadedInRange.add(msgId);
             }
         }
-        if (cursor <= selectBetweenBegin || cursor == Integer.MAX_VALUE || forwardEndReached[0] || cursor == selectBetweenLastCursor) {
+        Integer cursor = SelectBetweenPlanner.INSTANCE.cursor(loadedInRange, selectBetweenBegin);
+        Integer stop = SelectBetweenPlanner.INSTANCE.stopReason(cursor, selectBetweenBegin, forwardEndReached[0], selectBetweenLastCursor, capHit);
+        if (stop != null) {
             selectBetweenLoading = false;
             return;
         }
         selectBetweenLastCursor = cursor;
+        int cursorDate = 0;
+        MessageObject cursorMsg = messagesDict[0].get(cursor);
+        if (cursorMsg != null && cursorMsg.messageOwner != null) {
+            cursorDate = cursorMsg.messageOwner.date;
+        }
         selectBetweenLoadQuery = lastLoadIndex;
         waitingForLoad.add(lastLoadIndex);
         getMessagesController().loadMessages(dialog_id, mergeDialogId, false, 50, cursor, 0, true, cursorDate, classGuid, 1, 0, chatMode, threadMessageId, replyMaxReadId, lastLoadIndex++, isTopic);

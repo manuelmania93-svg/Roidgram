@@ -38,6 +38,8 @@ jobs:
         run: pip install Cython==3.0.11
       - name: Configure Android SDK Path
         run: echo "sdk.dir=${ANDROID_HOME}" >> local.properties
+      - name: Unit tests (selection planner)
+        run: ./gradlew TMessagesProj:testNormalStagingUnitTest --tests 'org.telegram.ui.SelectBetweenPlannerTest'
       - name: Build (staging, debug-signed)
         run: ./gradlew TMessagesProj:assembleNormalStaging
       - uses: actions/upload-artifact@v4
