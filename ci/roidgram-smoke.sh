@@ -207,7 +207,17 @@ if echo "$RESUMED" | grep -q "ApiSetupActivity"; then
   echo "setup shown again after credentials saved - gate failed"
   exit 1
 fi
-echo "$RESUMED" | grep -q "LoginActivity" || { echo "expected LoginActivity after gate passed"; exit 1; }
+if ! echo "$RESUMED" | grep -q "LoginActivity"; then
+  # Same evidence standard as the setup-reshown branch: the relaunch path can
+  # fail silently (blocked background activity start, alarm not fired, crash
+  # on relaunch), and only pixels + dump + logcat discriminate the cause.
+  adb exec-out screencap -p > /tmp/after-save-fail.png || true
+  adb shell uiautomator dump /sdcard/ui-fail.xml >/dev/null
+  adb pull /sdcard/ui-fail.xml /tmp/after-save-fail.xml >/dev/null 2>&1 || true
+  adb logcat -d > /tmp/logcat.txt || true
+  echo "expected LoginActivity after gate passed"
+  exit 1
+fi
 adb exec-out screencap -p > /tmp/after-save.png
 [ -s /tmp/after-save.png ] || { echo "no after-save screenshot"; exit 1; }
 
