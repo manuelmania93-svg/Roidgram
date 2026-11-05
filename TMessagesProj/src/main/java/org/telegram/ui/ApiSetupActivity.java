@@ -153,8 +153,13 @@ public class ApiSetupActivity extends Activity {
 
             // storeHash()/saveCustomApi() persist with apply(); flush the shared
             // "nekox_config" queue synchronously before the restart helper kills
-            // this process, so the saved credentials are guaranteed on disk.
-            getSharedPreferences("nekox_config", MODE_PRIVATE).edit().commit();
+            // this process, so the saved credentials are guaranteed on disk. When
+            // the flush fails, stay here and say so instead of restarting into a
+            // state where the credentials never reached disk.
+            if (!getSharedPreferences("nekox_config", MODE_PRIVATE).edit().commit()) {
+                error.setText("Could not save the credentials on this device.");
+                return;
+            }
 
             // Restart through the app's own two-process helper: every activity start
             // happens while one of its windows is foreground, so no blocked
