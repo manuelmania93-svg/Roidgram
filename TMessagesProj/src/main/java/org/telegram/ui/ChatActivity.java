@@ -463,6 +463,8 @@ public class ChatActivity extends BaseFragment implements
 {
 
     private MessageMenuStatus lastMessageMenuStatus = new MessageMenuStatus(false, false, false, false, false, false, false, false, false);
+    // Roidgram: upstream capped multi-select at 1000; raised. Forwards chunk at 100/request (SendMessagesHelper), deletes send one request (see commit msg).
+    private static final int MAX_SELECTED_MESSAGES = 10_000;
     private static final int PLUGIN_MESSAGE_MENU_OPTION_BASE = 0x70000000;
     private static final int PLUGIN_CHAT_ACTION_MENU_OPTION_BASE = 0x71000000;
     private static final int PLUGIN_CHAT_ACTION_MENU_GAP_ID = 0x71fffffe;
@@ -484,6 +486,13 @@ public class ChatActivity extends BaseFragment implements
     // buttons by Neko
     private final static int nkactionbarbtn_reply = 2000;
     private final static int nkactionbarbtn_selectBetween = 2001;
+
+    // Roidgram: range-select gap-fill state (loads unloaded history between begin and end through the normal pipeline)
+    private boolean selectBetweenLoading;
+    private int selectBetweenBegin;
+    private int selectBetweenEnd;
+    private int selectBetweenLoadQuery = -1;
+    private int selectBetweenLastCursor = -1;
     private final static int nkactionbarbtn_action_mode_other = 2002;
 
     private final static int nkheaderbtn_show_pinned = 2003;
@@ -2018,7 +2027,7 @@ public class ChatActivity extends BaseFragment implements
                         return;
                     }
                     if (messageObject.contentType == 0) {
-                        if (selected && selectedMessagesIds[0].size() + selectedMessagesIds[1].size() >= 1000) {
+                        if (selected && selectedMessagesIds[0].size() + selectedMessagesIds[1].size() >= MAX_SELECTED_MESSAGES) {
                             limitReached = true;
                         } else {
                             limitReached = false;
@@ -20700,6 +20709,84 @@ public class ChatActivity extends BaseFragment implements
         }
     }
 
+    // Roidgram: select all loaded messages strictly inside the active range (all types except service/error, parity with manual multi-select)
+    private void selectBetweenAddLoadedInRange() {
+        for (int i = 0; i < messages.size(); i++) {
+            MessageObject message = messages.get(i);
+            int msgId = message.getId();
+            if (msgId <= selectBetweenBegin || msgId >= selectBetweenEnd) {
+                continue;
+            }
+            if (selectedMessagesIds[0].indexOfKey(msgId) >= 0 || selectedMessagesIds[1].indexOfKey(msgId) >= 0) {
+                continue;
+            }
+            if (AyuFilter.shouldHideIgnoredBlockedMessages() && AyuFilter.isIgnoredBlockedMessage(message)) {
+                continue;
+            }
+            {
+                var selGroup = getGroup(message.getGroupId());
+                if (selGroup == null) {
+                    selGroup = getValidGroupedMessage(message);
+                }
+                var selFilterMsg = selGroup != null ? selGroup.findPrimaryMessageObject() : null;
+                if (selFilterMsg == null) {
+                    selFilterMsg = message;
+                }
+                if (AyuFilter.shouldHideFilteredMessage(selFilterMsg, selGroup)) {
+                    continue;
+                }
+            }
+            int type = getMessageType(message);
+            if (type == MESSAGE_TYPE_INVALID || type == MESSAGE_TYPE_SERVICE || type == MESSAGE_TYPE_SEND_ERROR_TEXT) {
+                continue;
+            }
+            if (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() >= MAX_SELECTED_MESSAGES) {
+                AndroidUtilities.shakeView(selectedMessagesCountTextView);
+                Vibrator vibrator = (Vibrator) ApplicationLoader.applicationContext.getSystemService(Context.VIBRATOR_SERVICE);
+                if (vibrator != null) {
+                    vibrator.vibrate(200);
+                }
+                selectBetweenLoading = false;
+                return;
+            }
+            addToSelectedMessages(message, true);
+        }
+    }
+
+    // Roidgram: walk older pages (same load_type=1 pipeline as scroll-up) until the range is fully loaded or history ends
+    private void continueSelectBetweenLoad() {
+        if (!selectBetweenLoading) {
+            return;
+        }
+        if (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() == 0) {
+            selectBetweenLoading = false;
+            return;
+        }
+        selectBetweenAddLoadedInRange();
+        updateActionModeTitle();
+        updateVisibleRows();
+        if (!selectBetweenLoading) {
+            return;
+        }
+        int cursor = Integer.MAX_VALUE;
+        int cursorDate = 0;
+        for (MessageObject message : messages) {
+            int msgId = message.getId();
+            if (msgId > 0 && msgId <= selectBetweenEnd && msgId < cursor) {
+                cursor = msgId;
+                cursorDate = message.messageOwner != null ? message.messageOwner.date : 0;
+            }
+        }
+        if (cursor <= selectBetweenBegin || cursor == Integer.MAX_VALUE || forwardEndReached[0] || cursor == selectBetweenLastCursor) {
+            selectBetweenLoading = false;
+            return;
+        }
+        selectBetweenLastCursor = cursor;
+        selectBetweenLoadQuery = lastLoadIndex;
+        waitingForLoad.add(lastLoadIndex);
+        getMessagesController().loadMessages(dialog_id, mergeDialogId, false, 50, cursor, 0, true, cursorDate, classGuid, 1, 0, chatMode, threadMessageId, replyMaxReadId, lastLoadIndex++, isTopic);
+    }
+
     private void addToSelectedMessages(MessageObject messageObject, boolean outside) {
         addToSelectedMessages(messageObject, outside, true);
     }
@@ -20771,7 +20858,7 @@ public class ChatActivity extends BaseFragment implements
                     }
                 }
             } else {
-                if (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() >= 1000) {
+                if (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() >= MAX_SELECTED_MESSAGES) {
                     AndroidUtilities.shakeView(selectedMessagesCountTextView);
                     Vibrator vibrator = (Vibrator) ApplicationLoader.applicationContext.getSystemService(Context.VIBRATOR_SERVICE);
                     if (vibrator != null) {
@@ -22348,6 +22435,10 @@ public class ChatActivity extends BaseFragment implements
             } else {
                 getNotificationCenter().updateAllowedNotifications(transitionAnimationIndex, alowedNotifications);
             }
+        }
+        if (selectBetweenLoading && queryLoadIndex == selectBetweenLoadQuery) {
+            selectBetweenLoadQuery = -1;
+            AndroidUtilities.runOnUIThread(this::continueSelectBetweenLoad);
         }
         int index = waitingForLoad.indexOf(queryLoadIndex);
         long currentUserId = getUserConfig().getClientUserId();
@@ -48357,54 +48448,11 @@ public class ChatActivity extends BaseFragment implements
                 }
             }
             Collections.sort(ids);
-            Integer begin = ids.get(0);
-            Integer end = ids.get(ids.size() - 1);
-            for (int i = 0; i < messages.size(); i++) {
-                int msgId = messages.get(i).getId();
-                if (AyuFilter.shouldHideIgnoredBlockedMessages() && AyuFilter.isIgnoredBlockedMessage(messages.get(i))) {
-                    continue;
-                }
-                {
-                    var selMsg = messages.get(i);
-                    var selGroup = getGroup(selMsg.getGroupId());
-                    if (selGroup == null) {
-                        selGroup = getValidGroupedMessage(selMsg);
-                    }
-                    var selFilterMsg = selGroup != null ? selGroup.findPrimaryMessageObject() : null;
-                    if (selFilterMsg == null) {
-                        selFilterMsg = selMsg;
-                    }
-                    if (AyuFilter.shouldHideFilteredMessage(selFilterMsg, selGroup)) {
-                        continue;
-                    }
-                }
-                if (msgId > begin && msgId < end && selectedMessagesIds[0].indexOfKey(msgId) < 0) {
-                    MessageObject message = messages.get(i);
-                    int type = getMessageType(message);
-
-                    if (type < MESSAGE_TYPE_MEDIA || type == MESSAGE_TYPE_SEND_ERROR_TEXT) {
-                        continue;
-                    }
-
-                    if (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() >= 1000) {
-                        if (message.getId() != begin) {
-                            for (int x = 0; x < messages.size(); x++) {
-                                MessageObject msg = messages.get(x);
-                                if (msg.getId() == begin) {
-                                    addToSelectedMessages(msg, false, false);
-                                    addToSelectedMessages(message, true);
-                                    break;
-                                }
-                            }
-                        }
-                        break;
-                    }
-
-                    addToSelectedMessages(message, true);
-                }
-            }
-            updateActionModeTitle();
-            updateVisibleRows();
+            selectBetweenBegin = ids.get(0);
+            selectBetweenEnd = ids.get(ids.size() - 1);
+            selectBetweenLastCursor = -1;
+            selectBetweenLoading = true;
+            continueSelectBetweenLoad();
         } else if (id == nkheaderbtn_zibi) {
             getMessageHelper().createDeleteHistoryAlert(ChatActivity.this, currentChat, forumTopic, mergeDialogId, themeDelegate);
         } else if (id == nkbtn_clearDeleted) {
