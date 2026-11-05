@@ -418,7 +418,7 @@
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="vnd.android.cursor.item/vnd.fork.risin42.nagramx.android.profile"/>
+                <data android:mimeType="vnd.android.cursor.item/vnd.app.roidgram.android.profile"/>
             </intent-filter>
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
@@ -477,8 +477,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.VIEW"/>
                 <category android:name="android.intent.category.DEFAULT"/>
-                <data android:mimeType="vnd.android.cursor.item/vnd.fork.risin42.nagramx.android.call"/>
-                <data android:mimeType="vnd.android.cursor.item/vnd.fork.risin42.nagramx.android.call.video"/>
+                <data android:mimeType="vnd.android.cursor.item/vnd.app.roidgram.android.call"/>
+                <data android:mimeType="vnd.android.cursor.item/vnd.app.roidgram.android.call.video"/>
             </intent-filter>
         </activity-alias>
         <activity

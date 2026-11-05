@@ -2,7 +2,7 @@
 DIR="$(cd "$(dirname "$0")" && pwd)"
 # Roidgram setup-gate smoke: fixture credentials only (dummy values, no real login).
 set -e
-PKG=fork.risin42.nagramx
+PKG=app.roidgram
 adb install -r /tmp/roidgram.apk
 adb shell monkey -p $PKG -c android.intent.category.LAUNCHER 1
 sleep 25
