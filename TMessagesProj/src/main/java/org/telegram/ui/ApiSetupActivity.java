@@ -1,10 +1,12 @@
 package org.telegram.ui;
 
 import android.app.Activity;
+import android.app.ActivityOptions;
 import android.app.AlarmManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
@@ -156,8 +158,19 @@ public class ApiSetupActivity extends Activity {
             // relaunch into a fresh process to initialise it with these credentials.
             Intent relaunch = new Intent(this, LaunchActivity.class)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
+            // Android 14+ treats an alarm-fired activity PendingIntent as a background
+            // activity start and blocks it unless the creator opts in (observed on the
+            // API 35 smoke emulator: ActivityTaskManager "Background activity launch
+            // blocked!", callingPackageTargetSdk 36, balRequireOptInByPendingIntentCreator).
+            Bundle piOptions = null;
+            if (Build.VERSION.SDK_INT >= 34) {
+                ActivityOptions opts = ActivityOptions.makeBasic();
+                opts.setPendingIntentBackgroundActivityStartMode(
+                        ActivityOptions.MODE_BACKGROUND_ACTIVITY_START_ALLOWED);
+                piOptions = opts.toBundle();
+            }
             PendingIntent pending = PendingIntent.getActivity(this, 0, relaunch,
-                    PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
+                    PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE, piOptions);
             AlarmManager alarms = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
             alarms.set(AlarmManager.RTC, System.currentTimeMillis() + 300, pending);
             finish();
