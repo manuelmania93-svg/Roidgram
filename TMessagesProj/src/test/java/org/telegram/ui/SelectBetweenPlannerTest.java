@@ -90,6 +90,36 @@ public class SelectBetweenPlannerTest {
     }
 
     @Test
+    public void cancelBoundary() {
+        assertTrue(SelectBetweenPlanner.INSTANCE.isCanceled(0));
+        assertFalse(SelectBetweenPlanner.INSTANCE.isCanceled(1));
+        assertFalse(SelectBetweenPlanner.INSTANCE.isCanceled(10_000));
+    }
+
+    @Test
+    public void topicIsolationByConstruction() {
+        // In a forum, message ids interleave across topics. The caller passes ONLY the
+        // current topic's loaded messages; the planner can never select or walk into
+        // ids it was not given (other topics), however dense the span is.
+        List<Integer> topicALoaded = Arrays.asList(10, 30, 50, 70, 90); // other-topic ids 11..89 absent
+        Integer cursor = SelectBetweenPlanner.INSTANCE.cursor(topicALoaded, 10);
+        assertEquals(Integer.valueOf(30), cursor); // never "11" (other topic)
+        Pair<List<Integer>, Boolean> r = SelectBetweenPlanner.INSTANCE.addPass(
+                Arrays.asList(30, 50, 70), new HashSet<Integer>(), 0, 10_000);
+        assertEquals(Arrays.asList(30, 50, 70), r.getFirst()); // only topic-A ids returned
+    }
+
+    @Test
+    public void stress100kCandidates() {
+        List<Integer> big = range(1, 100_000);
+        Pair<List<Integer>, Boolean> r = SelectBetweenPlanner.INSTANCE.addPass(big, new HashSet<Integer>(), 0, 100_000);
+        assertEquals(100_000, r.getFirst().size());
+        assertFalse(r.getSecond());
+        // Cursor over 100k loaded ids picks the true minimum above begin.
+        assertEquals(Integer.valueOf(2), SelectBetweenPlanner.INSTANCE.cursor(big, 1));
+    }
+
+    @Test
     public void emptyRangeIsComplete() {
         assertNull(SelectBetweenPlanner.INSTANCE.cursor(new ArrayList<Integer>(), 10));
         assertEquals(SelectBetweenPlanner.STOP_COMPLETE,

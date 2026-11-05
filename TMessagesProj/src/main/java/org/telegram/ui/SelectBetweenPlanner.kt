@@ -36,6 +36,9 @@ object SelectBetweenPlanner {
         return Pair(out, capHit)
     }
 
+    /** Leaving selection mode empties the selection: the walk cancels instead of loading in the background. */
+    fun isCanceled(selectedCount: Int): Boolean = selectedCount == 0
+
     /** Next page cursor: smallest loaded id greater than [begin]; null when the range is not loaded at all. */
     fun cursor(loadedIdsInRange: List<Int>, begin: Int): Int? {
         var best: Int? = null

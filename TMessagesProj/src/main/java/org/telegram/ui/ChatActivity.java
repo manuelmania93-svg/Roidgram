@@ -20783,7 +20783,7 @@ public class ChatActivity extends BaseFragment implements
         if (!selectBetweenLoading) {
             return;
         }
-        if (selectedMessagesIds[0].size() + selectedMessagesIds[1].size() == 0) {
+        if (SelectBetweenPlanner.INSTANCE.isCanceled(selectedMessagesIds[0].size() + selectedMessagesIds[1].size())) {
             selectBetweenLoading = false;
             return;
         }
