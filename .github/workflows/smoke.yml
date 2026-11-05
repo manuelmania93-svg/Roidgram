@@ -1,0 +1,78 @@
+name: Roidgram smoke (reuse build artifact)
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Workflow run id whose roidgram-staging artifact to smoke test'
+        required: true
+      coexist_run_id:
+        description: 'Optional run id of an old-package build: install it first and assert both packages coexist'
+        required: false
+        default: ''
+jobs:
+  smoke:
+    name: Emulator smoke test (no credentials)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Pillow for the status-bar contrast check
+        run: python3 -m pip install --break-system-packages pillow
+      - uses: actions/download-artifact@v4
+        with:
+          name: roidgram-staging
+          path: apk
+          run-id: ${{ inputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stage APK at absolute path
+        run: |
+          APK=$(find apk -name '*universal*.apk' | head -1); [ -z "$APK" ] && APK=$(find apk -name '*x86_64*.apk' | head -1)
+          [ -z "$APK" ] && { echo "no APK found in artifact"; exit 1; }
+          cp "$APK" /tmp/roidgram.apk && ls -la /tmp/roidgram.apk
+      - uses: actions/download-artifact@v4
+        if: ${{ inputs.coexist_run_id != '' }}
+        with:
+          name: roidgram-staging
+          path: apk-old
+          run-id: ${{ inputs.coexist_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Stage old-package APK for coexist check
+        if: ${{ inputs.coexist_run_id != '' }}
+        run: |
+          APK=$(find apk-old -name '*x86_64*.apk' | head -1)
+          [ -z "$APK" ] && { echo "no x86_64 APK in old-package artifact"; exit 1; }
+          cp "$APK" /tmp/old-package.apk && ls -la /tmp/old-package.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          script: |
+            if [ -f /tmp/old-package.apk ]; then bash "$GITHUB_WORKSPACE/ci/roidgram-coexist.sh"; fi
+            bash "$GITHUB_WORKSPACE/ci/roidgram-smoke.sh"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-artifacts
+          path: |
+            /tmp/coexist-packages.txt
+            /tmp/setup-screen.png
+            /tmp/invalid.png
+            /tmp/after-save.png
+            /tmp/after-save-fail.png
+            /tmp/after-save-fail.xml
+            /tmp/field-fail.png
+            /tmp/field-fail.xml
+            /tmp/touch-access-fail.png
+            /tmp/touch-access-fail.xml
+            /tmp/ui-invalid.xml
+            /tmp/ui-press.xml
+            /tmp/ime-open.png
+            /tmp/ime-state.txt
+            /tmp/logcat.txt
+            /tmp/logcat.txt
+          if-no-files-found: warn

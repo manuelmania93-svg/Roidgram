@@ -1,0 +1,32 @@
+.gradle
+.idea
+.kotlin
+.vscode
+*.aar
+*.so
+*.iml
+**/.DS_Store
+build/
+obj/
+local.properties
+TMessagesProj/.cxx/
+TMessagesProj/jniLibs/
+TMessagesProj/jniRes/
+TMessagesProj/afat/
+TMessagesProj_App/afat/
+TMessagesProj_AppHockeyApp/afat/
+TMessagesProj_AppStandalone/afat/
+TMessagesProj_AppHuawei/afat/
+TMessagesProj/jni/ffmpeg/build_android
+AGENTS.md
+.freebuff/
+chaq_inspect/
+__pycache__/
+*.py[cod]
+
+# local build logs
+build_*.log
+
+# local apk snapshots and jvm crash dumps
+_apk-archive-*/
+hs_err_pid*.log

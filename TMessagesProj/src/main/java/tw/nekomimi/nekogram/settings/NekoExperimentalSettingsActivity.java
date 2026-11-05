@@ -1,0 +1,352 @@
+package tw.nekomimi.nekogram.settings;
+
+import static org.telegram.messenger.LocaleController.getString;
+
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.animation.AnimatorSet;
+import android.annotation.SuppressLint;
+import android.content.Context;
+import android.os.Build;
+import android.view.View;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+
+import org.telegram.messenger.AndroidUtilities;
+import org.telegram.messenger.R;
+import org.telegram.messenger.SharedConfig;
+import org.telegram.tgnet.TLRPC;
+import org.telegram.tgnet.tl.TL_account;
+import org.telegram.ui.ActionBar.ActionBarLayout;
+import org.telegram.ui.ActionBar.AlertDialog;
+import org.telegram.ui.ActionBar.Theme;
+import org.telegram.ui.Cells.TextCheckCell;
+import org.telegram.ui.Cells.TextSettingsCell;
+import org.telegram.ui.Components.AlertsCreator;
+import org.telegram.ui.Components.RecyclerListView;
+import org.telegram.ui.Components.UndoView;
+
+import java.util.ArrayList;
+
+import kotlin.Unit;
+import tw.nekomimi.nekogram.NekoConfig;
+import tw.nekomimi.nekogram.config.CellGroup;
+import tw.nekomimi.nekogram.config.cell.AbstractConfigCell;
+import tw.nekomimi.nekogram.config.cell.ConfigCellCustom;
+import tw.nekomimi.nekogram.config.cell.ConfigCellDivider;
+import tw.nekomimi.nekogram.config.cell.ConfigCellHeader;
+import tw.nekomimi.nekogram.config.cell.ConfigCellSelectBox;
+import tw.nekomimi.nekogram.config.cell.ConfigCellTextCheck;
+import tw.nekomimi.nekogram.ui.PopupBuilder;
+import xyz.nextalone.nagram.NaConfig;
+
+@SuppressWarnings("unused")
+public class NekoExperimentalSettingsActivity extends BaseNekoXSettingsActivity {
+
+    private ListAdapter listAdapter;
+
+    @Override
+    protected RecyclerListView.SelectionAdapter getListAdapter() {
+        return listAdapter;
+    }
+
+    @Override
+    protected CellGroup getCellGroup() {
+        return cellGroup;
+    }
+
+    @Override
+    protected String getSettingsPrefix() {
+        return "experimental";
+    }
+
+    private AnimatorSet animatorSet;
+    private boolean sensitiveCanChange = false;
+    private boolean sensitiveEnabled = false;
+
+    private final CellGroup cellGroup = new CellGroup(this);
+
+    // General
+    private final AbstractConfigCell headerGeneral = cellGroup.appendCell(new ConfigCellHeader(getString(R.string.General)));
+    private final AbstractConfigCell backAnimationStyleRow = cellGroup.appendCell(new ConfigCellSelectBox(null, NaConfig.INSTANCE.getBackAnimationStyle(),
+            Build.VERSION.SDK_INT >= 34 ? new String[]{
+                    getString(R.string.BackAnimationClassic),
+                    getString(R.string.BackAnimationSpring),
+                    getString(R.string.BackAnimationPredictive),
+            } : new String[]{
+                    getString(R.string.BackAnimationClassic),
+                    getString(R.string.BackAnimationSpring),
+            }, null));
+    private final AbstractConfigCell springAnimationCrossfadeRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getSpringAnimationCrossfade()));
+    private final AbstractConfigCell sendLockedCustomEmojiAsStickerRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getSendLockedCustomEmojiAsSticker(), getString(R.string.SendLockedCustomEmojiAsStickerInfo)));
+    private final AbstractConfigCell unlimitedPinnedDialogsRow = cellGroup.appendCell(new ConfigCellTextCheck(NekoConfig.unlimitedPinnedDialogs, getString(R.string.UnlimitedPinnedDialogsAbout)));
+    private final AbstractConfigCell unlimitedFavedStickersRow = cellGroup.appendCell(new ConfigCellTextCheck(NekoConfig.unlimitedFavedStickers, getString(R.string.UnlimitedFavoredStickersAbout)));
+    private final AbstractConfigCell dividerGeneral = cellGroup.appendCell(new ConfigCellDivider());
+
+    // Connections
+    private final AbstractConfigCell headerConnection = cellGroup.appendCell(new ConfigCellHeader(getString(R.string.Connection)));
+    private final AbstractConfigCell boostUploadRow = cellGroup.appendCell(new ConfigCellTextCheck(NekoConfig.uploadBoost));
+    private final AbstractConfigCell enhancedFileLoaderRow = cellGroup.appendCell(new ConfigCellTextCheck(NekoConfig.enhancedFileLoader));
+    private final AbstractConfigCell dividerConnection = cellGroup.appendCell(new ConfigCellDivider());
+
+    // Media
+    private final AbstractConfigCell headerMedia = cellGroup.appendCell(new ConfigCellHeader(getString(R.string.MediaSettings)));
+    private final AbstractConfigCell audioEnhanceRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getNoiseSuppressAndVoiceEnhance()));
+    private final AbstractConfigCell sendMp4DocumentAsVideoRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getSendMp4DocumentAsVideo()));
+    private final AbstractConfigCell enhancedVideoBitrateRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getEnhancedVideoBitrate()));
+    private final AbstractConfigCell useSystemAiServiceRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getUseSystemAiService(), getString(R.string.UseSystemAiServiceDesc)));
+    private final AbstractConfigCell customAudioBitrateRow = cellGroup.appendCell(new ConfigCellCustom("customGroupVoipAudioBitrate", CellGroup.ITEM_TYPE_TEXT_SETTINGS_CELL, true));
+    private final AbstractConfigCell playerDecoderRow = cellGroup.appendCell(new ConfigCellSelectBox(null, NaConfig.INSTANCE.getPlayerDecoder(), new String[]{
+            getString(R.string.VideoPlayerDecoderHardware),
+            getString(R.string.VideoPlayerDecoderPreferHW),
+            getString(R.string.VideoPlayerDecoderPreferSW),
+    }, null));
+    private final AbstractConfigCell dividerMedia = cellGroup.appendCell(new ConfigCellDivider());
+
+    // N-Config
+    private final AbstractConfigCell headerNConfig = cellGroup.appendCell(new ConfigCellHeader(getString(R.string.N_Config)));
+    private final AbstractConfigCell showRPCErrorRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getShowRPCError()));
+    private final ConfigCellTextCheck forceFontWeightFallbackRow = (ConfigCellTextCheck) cellGroup.appendCell(new ConfigCellTextCheck(NekoConfig.forceFontWeightFallback, null, getString(R.string.ForceFontWeightFallback)));
+    private final AbstractConfigCell disableChoosingStickerRow = cellGroup.appendCell(new ConfigCellTextCheck(NekoConfig.disableChoosingSticker));
+    private final AbstractConfigCell disableFilteringRow = cellGroup.appendCell(new ConfigCellCustom("SensitiveDisableFiltering", CellGroup.ITEM_TYPE_TEXT_CHECK, true));
+    private final AbstractConfigCell devicePerformanceClassRow = cellGroup.appendCell(new ConfigCellSelectBox(null, NaConfig.INSTANCE.getPerformanceClass(), new String[]{
+            getString(R.string.QualityAuto) + " [" + SharedConfig.getPerformanceClassName(SharedConfig.measureDevicePerformanceClass()) + "]",
+            getString(R.string.PerformanceClassHigh),
+            getString(R.string.PerformanceClassAverage),
+            getString(R.string.PerformanceClassLow),
+    }, null));
+    private final AbstractConfigCell dividerNConfig = cellGroup.appendCell(new ConfigCellDivider());
+
+    // Story
+    private final AbstractConfigCell headerStory = cellGroup.appendCell(new ConfigCellHeader(getString(R.string.Story)));
+    private final AbstractConfigCell disableStoriesRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getDisableStories()));
+    private final AbstractConfigCell hideFromHeaderRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getHideStoriesFromHeader()));
+    private final AbstractConfigCell dividerStory = cellGroup.appendCell(new ConfigCellDivider());
+
+    // Pangu
+    private final AbstractConfigCell headerPangu = cellGroup.appendCell(new ConfigCellHeader(getString(R.string.Pangu)));
+    private final AbstractConfigCell enablePanguOnSendingRow = cellGroup.appendCell(new ConfigCellTextCheck(NaConfig.INSTANCE.getEnablePanguOnSending(), getString(R.string.PanguInfo)));
+    private final AbstractConfigCell dividerPangu = cellGroup.appendCell(new ConfigCellDivider());
+
+    public NekoExperimentalSettingsActivity() {
+        if (NaConfig.INSTANCE.getBackAnimationStyle().Int() != ActionBarLayout.BACK_ANIMATION_SPRING) {
+            cellGroup.rows.remove(springAnimationCrossfadeRow);
+        }
+        checkStoriesRows();
+        updateForceFontWeightFallbackEnabled();
+        addRowsToMap(cellGroup);
+    }
+
+    @SuppressLint("NewApi")
+    @Override
+    public View createView(Context context) {
+        View superView = super.createView(context);
+
+        listAdapter = new ListAdapter(context);
+
+        listView.setAdapter(listAdapter);
+
+        setupDefaultListeners();
+
+        // Cells: Set OnSettingChanged Callbacks
+        cellGroup.callBackSettingsChanged = (key, newValue) -> {
+            if (key.equals(NaConfig.INSTANCE.getDisableStories().getKey())) {
+                checkStoriesRows();
+                tooltip.showWithAction(0, UndoView.ACTION_NEED_RESTART, null, null);
+            } else if (key.equals(NaConfig.INSTANCE.getBackAnimationStyle().getKey())) {
+                final int style = (int) newValue;
+                if (style != ActionBarLayout.BACK_ANIMATION_SPRING) {
+                    if (cellGroup.rows.contains(springAnimationCrossfadeRow)) {
+                        final int index = cellGroup.rows.indexOf(springAnimationCrossfadeRow);
+                        cellGroup.rows.remove(springAnimationCrossfadeRow);
+                        listAdapter.notifyItemRemoved(index);
+                    }
+                } else {
+                    if (!cellGroup.rows.contains(springAnimationCrossfadeRow)) {
+                        final int index = cellGroup.rows.indexOf(backAnimationStyleRow) + 1;
+                        cellGroup.rows.add(index, springAnimationCrossfadeRow);
+                        listAdapter.notifyItemInserted(index);
+                    }
+                }
+                tooltip.showWithAction(0, UndoView.ACTION_NEED_RESTART, null, null);
+            } else if (key.equals(NaConfig.INSTANCE.getSpringAnimationCrossfade().getKey())) {
+                tooltip.showWithAction(0, UndoView.ACTION_NEED_RESTART, null, null);
+            } else if (key.equals(NaConfig.INSTANCE.getPerformanceClass().getKey())) {
+                tooltip.showWithAction(0, UndoView.ACTION_NEED_RESTART, null, null);
+            } else if (key.equals(NaConfig.INSTANCE.getPlayerDecoder().getKey())) {
+                tooltip.showWithAction(0, UndoView.ACTION_NEED_RESTART, null, null);
+            } else if (key.equals(NekoConfig.forceFontWeightFallback.getKey())) {
+                tooltip.showWithAction(0, UndoView.ACTION_NEED_RESTART, null, null);
+            } else if (key.equals(NaConfig.INSTANCE.getHideStoriesFromHeader().getKey())) {
+                tooltip.showWithAction(0, UndoView.ACTION_NEED_RESTART, null, null);
+            }
+        };
+
+        return superView;
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        checkSensitive();
+        updateForceFontWeightFallbackEnabled();
+    }
+
+    private void updateForceFontWeightFallbackEnabled() {
+        forceFontWeightFallbackRow.setEnabled(NekoConfig.typeface.Bool());
+    }
+
+    @Override
+    protected void onCustomCellClick(View view, int position, float x, float y) {
+        if (position == cellGroup.rows.indexOf(disableFilteringRow)) {
+            sensitiveEnabled = !sensitiveEnabled;
+            TL_account.setContentSettings req = new TL_account.setContentSettings();
+            req.sensitive_enabled = sensitiveEnabled;
+            AlertDialog progressDialog = new AlertDialog(getParentActivity(), 3);
+            progressDialog.show();
+            getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+                progressDialog.dismiss();
+                if (error == null) {
+                    if (response instanceof TLRPC.TL_boolTrue && view instanceof TextCheckCell) {
+                        ((TextCheckCell) view).setChecked(sensitiveEnabled);
+                    }
+                } else {
+                    AndroidUtilities.runOnUIThread(() -> AlertsCreator.processError(currentAccount, error, this, req));
+                }
+            }));
+        } else if (position == cellGroup.rows.indexOf(customAudioBitrateRow)) {
+            final int[] bitrates = {32, 64, 128, 192, 256, 320};
+            String[] bitrateNames = new String[]{
+                    "32 (" + getString(R.string.Default) + ")",
+                    "64",
+                    "128",
+                    "192",
+                    "256",
+                    "320"
+            };
+            int currentBitrate = NekoConfig.customAudioBitrate.Int();
+            int selectedIdx = -1;
+            for (int i = 0; i < bitrates.length; i++) {
+                if (bitrates[i] == currentBitrate) {
+                    selectedIdx = i;
+                    break;
+                }
+            }
+            showSingleChoiceDialog(getParentActivity(), R.string.customGroupVoipAudioBitrate, bitrateNames, selectedIdx, getResourceProvider(), i -> {
+                NekoConfig.customAudioBitrate.setConfigInt(bitrates[i]);
+                listAdapter.notifyItemChanged(position);
+            });
+        }
+    }
+
+    @Override
+    public int getBaseGuid() {
+        return 11000;
+    }
+
+    @Override
+    public int getDrawable() {
+        return R.drawable.msg_fave;
+    }
+
+    @Override
+    public String getTitle() {
+        return getString(R.string.Experimental);
+    }
+
+    private void checkSensitive() {
+        TL_account.getContentSettings req = new TL_account.getContentSettings();
+        getConnectionsManager().sendRequest(req, (response, error) -> AndroidUtilities.runOnUIThread(() -> {
+            if (error == null) {
+                TL_account.contentSettings settings = (TL_account.contentSettings) response;
+                sensitiveEnabled = settings.sensitive_enabled;
+                sensitiveCanChange = settings.sensitive_can_change;
+                int count = listView.getChildCount();
+                ArrayList<Animator> animators = new ArrayList<>();
+                for (int a = 0; a < count; a++) {
+                    View child = listView.getChildAt(a);
+                    RecyclerListView.Holder holder = (RecyclerListView.Holder) listView.getChildViewHolder(child);
+                    int position = holder.getAdapterPosition();
+                    if (position == cellGroup.rows.indexOf(disableFilteringRow)) {
+                        TextCheckCell checkCell = (TextCheckCell) holder.itemView;
+                        checkCell.setChecked(sensitiveEnabled);
+                        checkCell.setEnabled(sensitiveCanChange, animators);
+                        if (sensitiveCanChange) {
+                            if (!animators.isEmpty()) {
+                                if (animatorSet != null) {
+                                    animatorSet.cancel();
+                                }
+                                animatorSet = new AnimatorSet();
+                                animatorSet.playTogether(animators);
+                                animatorSet.addListener(new AnimatorListenerAdapter() {
+                                    @Override
+                                    public void onAnimationEnd(Animator animator) {
+                                        if (animator.equals(animatorSet)) {
+                                            animatorSet = null;
+                                        }
+                                    }
+                                });
+                                animatorSet.setDuration(150);
+                                animatorSet.start();
+                            }
+                        }
+                    }
+                }
+            } else {
+                AndroidUtilities.runOnUIThread(() -> AlertsCreator.processError(currentAccount, error, this, req));
+            }
+        }));
+    }
+
+    //impl ListAdapter
+    private class ListAdapter extends BaseListAdapter {
+
+        public ListAdapter(Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onBindCustomViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
+            if (holder.itemView instanceof TextCheckCell textCheckCell) {
+                textCheckCell.setEnabled(true, null);
+                if (position == cellGroup.rows.indexOf(disableFilteringRow)) {
+                    textCheckCell.setTextAndValueAndCheck(getString(R.string.SensitiveDisableFiltering), getString(R.string.SensitiveAbout), sensitiveEnabled, true, true);
+                    textCheckCell.setEnabled(sensitiveCanChange, null);
+                }
+            } else if (holder.itemView instanceof TextSettingsCell textSettingsCell) {
+                textSettingsCell.setTextColor(Theme.getColor(Theme.key_windowBackgroundWhiteBlackText));
+                if (position == cellGroup.rows.indexOf(customAudioBitrateRow)) {
+                    String value = NekoConfig.customAudioBitrate.Int() + "kbps";
+                    if (NekoConfig.customAudioBitrate.Int() == 32)
+                        value += " (" + getString(R.string.Default) + ")";
+                    textSettingsCell.setTextAndValue(getString(R.string.customGroupVoipAudioBitrate), value, true);
+                }
+            }
+        }
+    }
+
+    private void checkStoriesRows() {
+        boolean disabled = NaConfig.INSTANCE.getDisableStories().Bool();
+        if (listAdapter == null) {
+            if (disabled) {
+                cellGroup.rows.remove(hideFromHeaderRow);
+            }
+            return;
+        }
+        if (!disabled) {
+            final int index = cellGroup.rows.indexOf(disableStoriesRow);
+            if (!cellGroup.rows.contains(hideFromHeaderRow)) {
+                cellGroup.rows.add(index + 1, hideFromHeaderRow);
+                listAdapter.notifyItemInserted(index + 1);
+            }
+        } else {
+            final int index = cellGroup.rows.indexOf(hideFromHeaderRow);
+            if (index != -1) {
+                cellGroup.rows.remove(hideFromHeaderRow);
+                listAdapter.notifyItemRemoved(index);
+            }
+        }
+    }
+
+}

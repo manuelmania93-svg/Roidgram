@@ -1,0 +1,72 @@
+plugins {
+    // AGP version comes from buildSrc (the lottie-meta plugin needs AGP on its classpath);
+    // declaring a version here too conflicts with that.
+    id 'com.android.application' apply false
+    id 'com.google.gms.google-services' version '4.4.4' apply false
+    id 'com.google.firebase.crashlytics' version '3.0.6' apply false
+}
+
+subprojects {
+    if (path.startsWith(':TMessagesProj_Modules:media3:')) {
+        plugins.withId('com.android.library') {
+            androidComponents.finalizeDsl { androidDsl ->
+                if (androidDsl.namespace == null) {
+                    def manifestFile = file('src/main/AndroidManifest.xml')
+                    if (manifestFile.exists()) {
+                        androidDsl.namespace = new groovy.xml.XmlSlurper().parse(manifestFile).@package.text()
+                    }
+                }
+            }
+        }
+    }
+
+    afterEvaluate {
+        if (plugins.hasPlugin("com.android.library") || plugins.hasPlugin("com.android.application")) {
+            android {
+                compileSdk = 36
+                buildToolsVersion = "36.0.0"
+                ndkVersion = "27.2.12479018"
+
+                lint {
+                    checkReleaseBuilds = false
+                    disable 'MissingTranslation', 'ExtraTranslation', 'BlockedPrivateApi'
+                }
+
+                compileOptions {
+                    sourceCompatibility = JavaVersion.VERSION_21
+                    targetCompatibility = JavaVersion.VERSION_21
+
+                    coreLibraryDesugaringEnabled = true
+                }
+
+                defaultConfig {
+                    minSdk = 27
+                    targetSdk = 36
+                }
+
+                buildFeatures.buildConfig = true
+            }
+            dependencies {
+                coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.1.5'
+            }
+        }
+    }
+}
+
+// Strip JLatexMath fonts we don't ship (transitive AAR assets from
+// io.noties.markwon:ext-latex -> ru.noties:jlatexmath-android, ~764 KB total under
+// assets/org/scilab/forge/jlatexmath/fonts/). Has to live in the APK modules — a
+// library's androidResources.ignoreAssetsPattern doesn't filter packaging in apps
+// that consume it. Using subprojects keeps it in one place.
+//   keep:  base/, latin/, maths/, euler/  (\mathbb, \mathcal, \mathfrak still work)
+//   drop:  latin/optional/, maths/optional/  (~290 KB; \textbf/\textit/\mathds fall back)
+//          licences/                          (~20 KB; pure license text files)
+subprojects {
+    plugins.withId('com.android.application') {
+        android {
+            androidResources {
+                ignoreAssetsPattern '!.svn:!.git:!.ds_store:!*.scc:!CVS:!thumbs.db:!picasa.ini:!*~:!optional:!licences:!*stmary*:!*eufb*'
+            }
+        }
+    }
+}

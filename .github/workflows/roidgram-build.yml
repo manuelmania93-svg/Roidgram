@@ -1,0 +1,90 @@
+name: Roidgram build
+
+on:
+  push:
+    branches:
+      - base/nagramxf-stock
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    name: Gradle Build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+      - name: Set up Android SDK Tools
+        uses: android-actions/setup-android@v3
+        with:
+          packages: "build-tools;36.0.0 ndk;27.2.12479018 platforms;android-36"
+      - name: Set up Python (Chaquopy bridge source build)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.9'
+      - name: Install Cython (Chaquopy bridge source build)
+        run: pip install Cython==3.0.11
+      - name: Configure Android SDK Path
+        run: echo "sdk.dir=${ANDROID_HOME}" >> local.properties
+      - name: Unit tests (selection planner)
+        run: ./gradlew TMessagesProj:testNormalStagingUnitTest --tests 'org.telegram.ui.SelectBetweenPlannerTest'
+      - name: Build (staging, debug-signed)
+        run: ./gradlew TMessagesProj:assembleNormalStaging
+      - uses: actions/upload-artifact@v4
+        with:
+          name: roidgram-staging
+          path: TMessagesProj/build/outputs/apk/normal/staging/
+          if-no-files-found: error
+
+  smoke:
+    name: Emulator smoke test (no credentials)
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: roidgram-staging
+          path: apk
+      - name: Stage APK at absolute path
+        run: |
+          APK=$(find apk -name '*universal*.apk' | head -1); [ -z "$APK" ] && APK=$(find apk -name '*x86_64*.apk' | head -1)
+          [ -z "$APK" ] && { echo "no APK found in artifact"; exit 1; }
+          cp "$APK" /tmp/roidgram.apk && ls -la /tmp/roidgram.apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          script: >-
+            adb install -r /tmp/roidgram.apk &&
+            adb shell monkey -p app.roidgram -c android.intent.category.LAUNCHER 1 &&
+            sleep 25 &&
+            adb exec-out screencap -p > /tmp/setup-screen.png;
+            adb logcat -d > /tmp/logcat.txt || true;
+            if grep -q "FATAL EXCEPTION" /tmp/logcat.txt; then echo "App crashed before setup"; exit 1; fi;
+            echo "No crash; setup screen screenshot captured"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-artifacts
+          path: |
+            /tmp/setup-screen.png
+            /tmp/logcat.txt
+          if-no-files-found: warn
