@@ -44,19 +44,33 @@ public class ApiSetupActivity extends Activity {
         int pad = dp(24);
         root.setPadding(pad, pad, pad, pad);
         ScrollView scroll = new ScrollView(this);
-        // SDK 35 enforces edge-to-edge: the window stays full-height even with
-        // adjustResize, so without inset handling the IME covers the lower field and
-        // the save button and a fully covered control drops out of the accessibility
-        // tree (unreachable by keyboard focus navigation). Apply system-bar and IME
-        // insets as ScrollView padding: the scrollable area shrinks to the visible
-        // region, focus changes scroll the focused field back into view, and every
-        // control stays reachable on short screens.
+        // This window gets NO IME insets and NO adjustResize relayout on the
+        // API-35 emulator with edge-to-edge enforced (WindowInsetsCompat.Type.ime()
+        // stays 0 with the keyboard visibly open, and the window keeps full
+        // height - smoke evidence: field-fail.xml). So combine two sources:
+        // system-bar insets for the stable top/bottom padding (delivered fine),
+        // and the visible display frame for the keyboard - it shrinks above the
+        // IME in every configuration, insets dispatch or not. Padding the
+        // ScrollView to the real viewport keeps the focused field and the save
+        // button visibleToUser (a keyboard-covered control drops out of the
+        // accessibility tree and becomes unreachable for focus navigation), and
+        // focus changes scroll them into view.
+        final int[] sysInsets = {0, 0};
+        final int[] keyboardBottom = {0};
         ViewCompat.setOnApplyWindowInsetsListener(scroll, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
-            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
-            v.setPadding(v.getPaddingLeft(), bars.top, v.getPaddingRight(),
-                    Math.max(bars.bottom, ime.bottom));
+            sysInsets[0] = bars.top;
+            sysInsets[1] = bars.bottom;
+            v.setPadding(0, sysInsets[0], 0, Math.max(sysInsets[1], keyboardBottom[0]));
             return insets;
+        });
+        final View decor = getWindow().getDecorView();
+        final android.graphics.Rect visibleFrame = new android.graphics.Rect();
+        decor.getViewTreeObserver().addOnGlobalLayoutListener(() -> {
+            if (decor.getHeight() <= 0) return;
+            decor.getWindowVisibleDisplayFrame(visibleFrame);
+            keyboardBottom[0] = Math.max(0, decor.getHeight() - visibleFrame.bottom);
+            scroll.setPadding(0, sysInsets[0], 0, Math.max(sysInsets[1], keyboardBottom[0]));
         });
         scroll.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
