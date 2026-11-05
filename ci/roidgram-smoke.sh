@@ -207,15 +207,17 @@ if echo "$RESUMED" | grep -q "ApiSetupActivity"; then
   echo "setup shown again after credentials saved - gate failed"
   exit 1
 fi
-# The gate passed. A fresh install with no account lands on the stock intro
-# ("Start Messaging", hosted under LaunchActivity) - LoginActivity (phone entry)
-# comes after tapping through it, or directly if the intro is ever skipped.
-# Walk the real user path instead of expecting LoginActivity in one jump.
+# The gate passed. In this fork the whole login flow is fragments INSIDE
+# LaunchActivity (LaunchActivity.java:1207-1210: new LoginActivity()/IntroActivity()
+# via presentFragment), so ResumedActivity stays LaunchActivity and an activity-name
+# assertion can never pass. Assert screen CONTENT instead: the phone-entry slide
+# header "Your Phone" (LoginActivity.java:3584, R.string.YourPhone). Walk the real
+# path: intro "Start Messaging" -> permission prompt "Continue" -> system
+# permission dialog, denied ("Don't allow" - manual entry still works).
 LOGIN_OK=0
-for i in $(seq 1 10); do
+for i in $(seq 1 15); do
   RESUMED=$(adb shell "dumpsys activity activities | grep ResumedActivity")
   echo "$RESUMED"
-  if echo "$RESUMED" | grep -q "LoginActivity"; then LOGIN_OK=1; break; fi
   if echo "$RESUMED" | grep -q "ApiSetupActivity"; then
     adb exec-out screencap -p > /tmp/after-save-fail.png || true
     adb shell uiautomator dump /sdcard/ui-fail.xml >/dev/null
@@ -226,12 +228,23 @@ for i in $(seq 1 10); do
   fi
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null
   adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+  if grep -qi "Your Phone" /tmp/ui.xml; then LOGIN_OK=1; break; fi
   if XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "Start Messaging"); then
     adb shell input tap $XY
     sleep 2
-  else
-    sleep 2
+    continue
   fi
+  if XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "Continue"); then
+    adb shell input tap $XY
+    sleep 2
+    continue
+  fi
+  if XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "don't allow"); then
+    adb shell input tap $XY
+    sleep 2
+    continue
+  fi
+  sleep 2
 done
 if [ "$LOGIN_OK" != "1" ]; then
   # Same evidence standard as the setup-reshown branch: only pixels + dump +
