@@ -16,6 +16,9 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 import org.telegram.messenger.ApiCredentials;
@@ -41,9 +44,20 @@ public class ApiSetupActivity extends Activity {
         int pad = dp(24);
         root.setPadding(pad, pad, pad, pad);
         ScrollView scroll = new ScrollView(this);
-        // Let system-bar and IME insets shrink the scrollable area: with adjustResize
-        // the fields and the save button stay reachable by scrolling on short screens.
-        scroll.setFitsSystemWindows(true);
+        // SDK 35 enforces edge-to-edge: the window stays full-height even with
+        // adjustResize, so without inset handling the IME covers the lower field and
+        // the save button and a fully covered control drops out of the accessibility
+        // tree (unreachable by keyboard focus navigation). Apply system-bar and IME
+        // insets as ScrollView padding: the scrollable area shrinks to the visible
+        // region, focus changes scroll the focused field back into view, and every
+        // control stays reachable on short screens.
+        ViewCompat.setOnApplyWindowInsetsListener(scroll, (v, insets) -> {
+            Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            v.setPadding(v.getPaddingLeft(), bars.top, v.getPaddingRight(),
+                    Math.max(bars.bottom, ime.bottom));
+            return insets;
+        });
         scroll.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(scroll);
