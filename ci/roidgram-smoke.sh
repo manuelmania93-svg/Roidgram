@@ -207,10 +207,35 @@ if echo "$RESUMED" | grep -q "ApiSetupActivity"; then
   echo "setup shown again after credentials saved - gate failed"
   exit 1
 fi
-if ! echo "$RESUMED" | grep -q "LoginActivity"; then
-  # Same evidence standard as the setup-reshown branch: the relaunch path can
-  # fail silently (blocked background activity start, alarm not fired, crash
-  # on relaunch), and only pixels + dump + logcat discriminate the cause.
+# The gate passed. A fresh install with no account lands on the stock intro
+# ("Start Messaging", hosted under LaunchActivity) - LoginActivity (phone entry)
+# comes after tapping through it, or directly if the intro is ever skipped.
+# Walk the real user path instead of expecting LoginActivity in one jump.
+LOGIN_OK=0
+for i in $(seq 1 10); do
+  RESUMED=$(adb shell "dumpsys activity activities | grep ResumedActivity")
+  echo "$RESUMED"
+  if echo "$RESUMED" | grep -q "LoginActivity"; then LOGIN_OK=1; break; fi
+  if echo "$RESUMED" | grep -q "ApiSetupActivity"; then
+    adb exec-out screencap -p > /tmp/after-save-fail.png || true
+    adb shell uiautomator dump /sdcard/ui-fail.xml >/dev/null
+    adb pull /sdcard/ui-fail.xml /tmp/after-save-fail.xml >/dev/null 2>&1 || true
+    adb logcat -d > /tmp/logcat.txt || true
+    echo "setup shown again after credentials saved - gate failed"
+    exit 1
+  fi
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+  adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+  if XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "Start Messaging"); then
+    adb shell input tap $XY
+    sleep 2
+  else
+    sleep 2
+  fi
+done
+if [ "$LOGIN_OK" != "1" ]; then
+  # Same evidence standard as the setup-reshown branch: only pixels + dump +
+  # logcat discriminate a stuck onboarding from a real gate regression.
   adb exec-out screencap -p > /tmp/after-save-fail.png || true
   adb shell uiautomator dump /sdcard/ui-fail.xml >/dev/null
   adb pull /sdcard/ui-fail.xml /tmp/after-save-fail.xml >/dev/null 2>&1 || true
