@@ -277,4 +277,6 @@
     <string name="DonateAfdian">Afdian</string>
     <string name="DonateKoFi">Ko-fi</string>
     <string name="DonateInfo">Like this client? **Support development**</string>
+    <string name="DeleteSelectionTooLargeTitle">Selection too large</string>
+    <string name="DeleteSelectionTooLargeMessage">Deleting more than 1000 messages at once is not supported yet. Please delete in batches of up to 1000 messages.</string>
 </resources>

@@ -7841,6 +7841,20 @@ public class AlertsCreator {
             count = selectedMessages[0].size() + selectedMessages[1].size();
         }
 
+        // Roidgram: selections above the upstream 1000 cap are new territory. The MTProto
+        // delete vector limit is undocumented and official clients never send larger delete
+        // requests (their selection cap is 1000 - the fork's old cap). Block with an
+        // explanation instead of sending an unverified oversized request; <=1000 behaves
+        // exactly as upstream. Single messages and albums can never reach this.
+        if (count > 1000) {
+            AlertDialog.Builder guard = new AlertDialog.Builder(activity, resourcesProvider);
+            guard.setTitle(LocaleController.getString(R.string.DeleteSelectionTooLargeTitle));
+            guard.setMessage(LocaleController.getString(R.string.DeleteSelectionTooLargeMessage));
+            guard.setPositiveButton(LocaleController.getString(R.string.OK), null);
+            fragment.showDialog(guard.create());
+            return;
+        }
+
         // --- AyuGram hook
         FrameLayout ayuFrameLayout = null;
         boolean hasAyuDeletedMessages = false;
