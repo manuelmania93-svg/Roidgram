@@ -41,6 +41,9 @@ public class ApiSetupActivity extends Activity {
         int pad = dp(24);
         root.setPadding(pad, pad, pad, pad);
         ScrollView scroll = new ScrollView(this);
+        // Let system-bar and IME insets shrink the scrollable area: with adjustResize
+        // the fields and the save button stay reachable by scrolling on short screens.
+        scroll.setFitsSystemWindows(true);
         scroll.addView(root, new ScrollView.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         setContentView(scroll);

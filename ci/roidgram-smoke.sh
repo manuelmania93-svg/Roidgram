@@ -31,26 +31,29 @@ FIELD_KB=0
 focus_node() {
   local hint="$1"
   local real_attempts=0
-  for attempt in $(seq 1 8); do
+  # TAB moves focus downward but does not wrap past the last focusable, so
+  # navigation runs downward first, then upward with KEYCODE_NAVIGATE_PREVIOUS.
+  local dir_keys="KEYCODE_TAB KEYCODE_TAB KEYCODE_TAB KEYCODE_NAVIGATE_PREVIOUS KEYCODE_NAVIGATE_PREVIOUS KEYCODE_NAVIGATE_PREVIOUS KEYCODE_NAVIGATE_PREVIOUS"
+  for key in $dir_keys; do
     if [ "$real_attempts" -eq 0 ] && [ "$FIELD_KB" = "0" ]; then
       # Coordinate tap is only safe before the IME is open; afterwards the
       # keyboard covers later fields and a tap types into the focused field.
       tap_on_edit "$hint" || tap_on "$hint" || true
+      real_attempts=1
     else
-      adb shell input keyevent KEYCODE_TAB
+      adb shell input keyevent $key
     fi
     sleep 1
     adb shell uiautomator dump /sdcard/ui.xml >/dev/null
     adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
     # System ANR dialogs (e.g. "Pixel Launcher isn't responding" on this small
     # emulator) cover the app and eat taps: dismiss with "Wait" and retry
-    # without spending a real attempt.
+    # without spending a move.
     if grep -q "isn't responding" /tmp/ui.xml; then
       XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "wait") && adb shell input tap $XY
       sleep 2
       continue
     fi
-    real_attempts=$((real_attempts+1))
     if python3 "$DIR/focuscheck.py" /tmp/ui.xml "$hint"; then return 0; fi
   done
   adb exec-out screencap -p > /tmp/field-fail.png || true
