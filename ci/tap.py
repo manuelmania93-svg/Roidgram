@@ -9,11 +9,13 @@ def tap(n):
 nodes = list(tree.iter('node'))
 if prefer_edit:
     for n in nodes:
-        if 'edittext' in (n.get('class') or '').lower() and target in (n.get('text') or '').strip().lower():
+        ident = ((n.get('text') or '') + ' ' + (n.get('content-desc') or '')).strip().lower()
+        if 'edittext' in (n.get('class') or '').lower() and target in ident:
             tap(n)
 else:
     for n in nodes:
-        if target in (n.get('text') or '').strip().lower():
+        ident = ((n.get('text') or '') + ' ' + (n.get('content-desc') or '')).strip().lower()
+    if target in ident:
             tap(n)
 print('node not found: ' + sys.argv[2])
 sys.exit(1)

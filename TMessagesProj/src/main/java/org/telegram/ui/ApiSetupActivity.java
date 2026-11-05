@@ -87,12 +87,14 @@ public class ApiSetupActivity extends Activity {
 
         EditText apiId = new EditText(this);
         apiId.setHint("api_id");
+        apiId.setContentDescription("api_id");
         apiId.setInputType(InputType.TYPE_CLASS_NUMBER);
         root.addView(apiId, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         EditText apiHash = new EditText(this);
         apiHash.setHint("api_hash");
+        apiHash.setContentDescription("api_hash");
         apiHash.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD);
         root.addView(apiHash, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
