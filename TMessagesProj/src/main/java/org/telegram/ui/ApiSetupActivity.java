@@ -1,8 +1,6 @@
 package org.telegram.ui;
 
 import android.app.Activity;
-import android.app.AlarmManager;
-import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -25,6 +23,7 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import org.telegram.messenger.ApiCredentials;
 
 import tw.nekomimi.nekogram.NekoXConfig;
+import tw.nekomimi.nekogram.helpers.AppRestartHelper;
 
 /**
  * Roidgram first-launch screen: the user enters their own Telegram api_id/api_hash
@@ -152,16 +151,20 @@ public class ApiSetupActivity extends Activity {
             NekoXConfig.saveCustomApi();
             Toast.makeText(this, "Saved. Restarting Roidgram...", Toast.LENGTH_SHORT).show();
 
-            // The native connection layer reads the api id once at process start, so
-            // relaunch into a fresh process to initialise it with these credentials.
-            Intent relaunch = new Intent(this, LaunchActivity.class)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-            PendingIntent pending = PendingIntent.getActivity(this, 0, relaunch,
-                    PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-            AlarmManager alarms = (AlarmManager) getSystemService(Context.ALARM_SERVICE);
-            alarms.set(AlarmManager.RTC, System.currentTimeMillis() + 300, pending);
-            finish();
-            Runtime.getRuntime().exit(0);
+            // storeHash()/saveCustomApi() persist with apply(); flush the shared
+            // "nekox_config" queue synchronously before the restart helper kills
+            // this process, so the saved credentials are guaranteed on disk.
+            getSharedPreferences("nekox_config", MODE_PRIVATE).edit().commit();
+
+            // Restart through the app's own two-process helper: every activity start
+            // happens while one of its windows is foreground, so no blocked
+            // background activity launch is involved (the alarm + activity
+            // PendingIntent relaunch used here before is blocked for targetSdk 35+,
+            // and opting the PendingIntent in cannot help because a killed process
+            // satisfies no background-launch exception when the alarm fires). The
+            // fresh main process boots the normal path and initialises the native
+            // layer with the credentials just saved.
+            AppRestartHelper.triggerRebirth(this, new Intent(this, LaunchActivity.class));
         });
     }
 
