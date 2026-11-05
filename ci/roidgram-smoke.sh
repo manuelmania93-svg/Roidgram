@@ -26,11 +26,15 @@ tap_on_edit() {
 # soft keyboard once typing starts, so coordinate taps land on the keyboard.
 # Focus navigation is used instead: one coordinate tap for the first field,
 # then KEYCODE_TAB between nodes, verifying the focused node after each move.
+FIELD_KB=0
+
 focus_node() {
   local hint="$1"
   local real_attempts=0
   for attempt in $(seq 1 8); do
-    if [ "$real_attempts" -eq 0 ]; then
+    if [ "$real_attempts" -eq 0 ] && [ "$FIELD_KB" = "0" ]; then
+      # Coordinate tap is only safe before the IME is open; afterwards the
+      # keyboard covers later fields and a tap types into the focused field.
       tap_on_edit "$hint" || tap_on "$hint" || true
     else
       adb shell input keyevent KEYCODE_TAB
@@ -64,7 +68,7 @@ set_field() {
     adb shell input text "$value"
     adb shell uiautomator dump /sdcard/ui.xml >/dev/null
     adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
-    if python3 "$DIR/fieldcheck.py" /tmp/ui.xml "$value"; then return 0; fi
+    if python3 "$DIR/fieldcheck.py" /tmp/ui.xml "$value"; then FIELD_KB=1; return 0; fi
     echo "field '$hint' did not hold the intended value after attempt $attempt"
   done
   adb exec-out screencap -p > /tmp/field-fail.png || true
@@ -159,6 +163,9 @@ if [ "$touch_access" = "inaccessible" ]; then
   cp /tmp/ui.xml /tmp/touch-access-fail.xml || true
 fi
 
+# The probe's coordinate taps may have typed into the focused field via the IME;
+# re-enter both fields deterministically (TAB-only now that the IME is open).
+set_field "api_id" "123456"
 set_field "api_hash" "0123456789abcdef0123456789abcdef"
 press_button "save and continue"
 sleep 18
