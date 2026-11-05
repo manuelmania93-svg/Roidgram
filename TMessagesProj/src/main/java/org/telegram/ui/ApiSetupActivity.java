@@ -9,6 +9,7 @@ import android.os.Bundle;
 import android.text.InputType;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -38,23 +39,21 @@ public class ApiSetupActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(24);
         root.setPadding(pad, pad, pad, pad);
         ScrollView scroll = new ScrollView(this);
-        // This window gets NO IME insets and NO adjustResize relayout on the
-        // API-35 emulator with edge-to-edge enforced (WindowInsetsCompat.Type.ime()
-        // stays 0 with the keyboard visibly open, and the window keeps full
-        // height - smoke evidence: field-fail.xml). So combine two sources:
-        // system-bar insets for the stable top/bottom padding (delivered fine),
-        // and the visible display frame for the keyboard - it shrinks above the
-        // IME in every configuration, insets dispatch or not. Padding the
-        // ScrollView to the real viewport keeps the focused field and the save
-        // button visibleToUser (a keyboard-covered control drops out of the
-        // accessibility tree and becomes unreachable for focus navigation), and
-        // focus changes scroll them into view.
+        // Fields-first ordering is the reliable layer: on the API-35 emulator
+        // the IME gives this window no signal at all - no adjustResize relayout
+        // (manifest + programmatic), ime() insets stay 0, and the visible display
+        // frame keeps full height (smoke 41960442210: keyboard visibly covering
+        // api_hash while keyboardBottom measured 0) - so NO padding computation
+        // can find the keyboard there. With the interactive controls at the top
+        // they stay above the keyboard top on small screens without any signal;
+        // the system-bar padding below still applies where insets do dispatch.
         final int[] sysInsets = {0, 0};
         final int[] keyboardBottom = {0};
         ViewCompat.setOnApplyWindowInsetsListener(scroll, (v, insets) -> {
@@ -86,17 +85,6 @@ public class ApiSetupActivity extends Activity {
         title.setTextSize(22);
         root.addView(title);
 
-        TextView info = new TextView(this);
-        info.setText("Roidgram needs your own Telegram API credentials before the first login.\n\n"
-                + "1. Open https://my.telegram.org and sign in with your Telegram account.\n"
-                + "2. Open \"API development tools\" and create an application.\n"
-                + "3. Enter the api_id and api_hash below, then continue to the normal login.\n\n"
-                + "The api_hash is stored encrypted on this device (Android Keystore); the api_id is kept in the app's private settings.\n\n"
-                + "Roidgram uses them only to connect to Telegram, like any Telegram app.");
-        info.setTextSize(15);
-        info.setPadding(0, dp(12), 0, dp(16));
-        root.addView(info);
-
         EditText apiId = new EditText(this);
         apiId.setHint("api_id");
         apiId.setInputType(InputType.TYPE_CLASS_NUMBER);
@@ -118,6 +106,17 @@ public class ApiSetupActivity extends Activity {
         save.setText("Save and continue");
         root.addView(save, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        TextView info = new TextView(this);
+        info.setText("Roidgram needs your own Telegram API credentials before the first login.\n\n"
+                + "1. Open https://my.telegram.org and sign in with your Telegram account.\n"
+                + "2. Open \"API development tools\" and create an application.\n"
+                + "3. Enter the api_id and api_hash above, then continue to the normal login.\n\n"
+                + "The api_hash is stored encrypted on this device (Android Keystore); the api_id is kept in the app's private settings.\n\n"
+                + "Roidgram uses them only to connect to Telegram, like any Telegram app.");
+        info.setTextSize(15);
+        info.setPadding(0, dp(12), 0, dp(16));
+        root.addView(info);
 
         save.setOnClickListener(v -> {
             String idText = apiId.getText().toString().trim();
