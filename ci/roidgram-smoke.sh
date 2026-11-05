@@ -214,6 +214,26 @@ fi
 # header "Your Phone" (LoginActivity.java:3584, R.string.YourPhone). Walk the real
 # path: intro "Start Messaging" -> permission prompt "Continue" -> system
 # permission dialog, denied ("Don't allow" - manual entry still works).
+# Terminal assertion = header identity AND a visible, enabled, editable phone
+# field (phoneField carries content-desc "Phone number", LoginActivity.java:2394)
+# - matching the header text alone could pass on a hidden or partial render.
+phone_slide_ready() {
+  python3 - /tmp/ui.xml <<'PYCHECK'
+import re, sys, xml.etree.ElementTree as ET
+header = False
+field = False
+for n in ET.parse(sys.argv[1]).iter('node'):
+    if (n.get('text') or '').strip() == 'Your Phone':
+        header = True
+    cls = n.get('class') or ''
+    if (n.get('content-desc') or '').strip() == 'Phone number' and 'EditText' in cls and n.get('enabled') == 'true':
+        nums = list(map(int, re.findall(r'\d+', n.get('bounds') or '')))
+        if len(nums) == 4 and nums[2] - nums[0] > 0 and nums[3] - nums[1] > 0:
+            field = True
+sys.exit(0 if (header and field) else 1)
+PYCHECK
+}
+
 LOGIN_OK=0
 for i in $(seq 1 15); do
   RESUMED=$(adb shell "dumpsys activity activities | grep ResumedActivity")
@@ -228,7 +248,7 @@ for i in $(seq 1 15); do
   fi
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null
   adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
-  if grep -qi "Your Phone" /tmp/ui.xml; then LOGIN_OK=1; break; fi
+  if phone_slide_ready; then LOGIN_OK=1; break; fi
   if XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "Start Messaging"); then
     adb shell input tap $XY
     sleep 2
