@@ -259,7 +259,10 @@ for i in $(seq 1 15); do
     sleep 2
     continue
   fi
-  if XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "don't allow"); then
+  # System permission dialog: deny by stable resource-id (locale/punctuation
+  # proof), text match as fallback. Denial is fixture-only; manual phone entry
+  # still works (LoginActivity.onRequestPermissionsResultFragment).
+  if XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "permissioncontroller:id/permission_deny_button" || python3 "$DIR/boundsget.py" /tmp/ui.xml "don't allow"); then
     adb shell input tap $XY
     sleep 2
     continue
