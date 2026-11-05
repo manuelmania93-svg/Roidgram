@@ -130,6 +130,27 @@ sleep 15
 set_field "api_id" "123456"
 
 echo "== touch-access probe: hash field reachable with keyboard open (tap, then scroll+tap) =="
+# Capture the actual IME-open state FIRST: screenshot + IME window bounds, so the
+# covered/uncovered claim rests on pixels and insets taken at the moment, not on
+# an end-of-probe screenshot after the keyboard may have been dismissed.
+adb exec-out screencap -p > /tmp/ime-open.png || true
+{
+  echo "== dumpsys window: IME / input method windows =="
+  adb shell dumpsys window | grep -iE 'InputMethod|ime' | head -20
+  echo "== dumpsys input_method: bounds =="
+  adb shell dumpsys input_method | grep -iE 'mCurRootView|bound|frame|visible' | head -20
+  echo "== focused node + field bounds =="
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+  adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+  python3 - <<'PYEOF'
+import xml.etree.ElementTree as ET
+for n in ET.parse('/tmp/ui.xml').iter('node'):
+    t = (n.get('text') or '').strip()
+    cls = (n.get('class') or '').split('.')[-1]
+    if t or 'EditText' in cls or 'Button' in cls or n.get('focused') == 'true':
+        print(f"{cls:12} focused={n.get('focused')} bounds={n.get('bounds')} {t[:40]!r}")
+PYEOF
+} > /tmp/ime-state.txt 2>&1 || true
 # With the IME open after typing api_id, check whether ordinary touch can reach
 # the api_hash field at 320x640: direct coordinate tap first, then a scroll
 # swipe in the content area above the keyboard and a second tap. Result is

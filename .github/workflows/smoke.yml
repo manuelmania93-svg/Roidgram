@@ -51,6 +51,8 @@ jobs:
             /tmp/touch-access-fail.xml
             /tmp/ui-invalid.xml
             /tmp/ui-press.xml
+            /tmp/ime-open.png
+            /tmp/ime-state.txt
             /tmp/logcat.txt
             /tmp/logcat.txt
           if-no-files-found: warn
