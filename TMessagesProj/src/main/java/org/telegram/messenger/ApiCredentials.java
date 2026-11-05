@@ -8,7 +8,6 @@ import android.util.Base64;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyStore;
-import java.security.SecureRandom;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -59,9 +58,12 @@ public class ApiCredentials {
     /** Encrypts and stores the hash. Any previous blob is replaced. */
     public static void storeHash(Context context, String hash) throws Exception {
         Cipher cipher = Cipher.getInstance("AES/GCM/NoPadding");
-        byte[] iv = new byte[12];
-        new SecureRandom().nextBytes(iv);
-        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey(), new GCMParameterSpec(128, iv));
+        // AndroidKeyStore keys default to setRandomizedEncryptionRequired(true), which
+        // rejects a caller-provided IV for ENCRYPT_MODE ("Caller-provided IV not
+        // permitted"). Let the keystore generate the IV and read it back; decryption
+        // still supplies the stored IV, which stays permitted.
+        cipher.init(Cipher.ENCRYPT_MODE, getOrCreateKey());
+        byte[] iv = cipher.getIV();
         byte[] encrypted = cipher.doFinal(hash.getBytes(StandardCharsets.UTF_8));
         byte[] blob = new byte[iv.length + encrypted.length];
         System.arraycopy(iv, 0, blob, 0, iv.length);
