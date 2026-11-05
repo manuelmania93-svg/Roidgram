@@ -223,7 +223,9 @@ import re, sys, xml.etree.ElementTree as ET
 header = False
 field = False
 for n in ET.parse(sys.argv[1]).iter('node'):
-    if (n.get('text') or '').strip() == 'Your Phone':
+    # The rendered title is "Your phone number" (verified in run dumps); the
+    # R.string.YourPhone header name is "Your Phone". Match the prefix, any case.
+    if (n.get('text') or '').strip().lower().startswith('your phone'):
         header = True
     cls = n.get('class') or ''
     if (n.get('content-desc') or '').strip() == 'Phone number' and 'EditText' in cls and n.get('enabled') == 'true':
