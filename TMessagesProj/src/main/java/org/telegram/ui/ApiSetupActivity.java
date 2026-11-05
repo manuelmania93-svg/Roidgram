@@ -140,6 +140,9 @@ public class ApiSetupActivity extends Activity {
             try {
                 ApiCredentials.storeHash(this, hash);
             } catch (Throwable t) {
+                // The hash itself is never logged; the exception type/stack is needed to
+                // diagnose keystore/cipher failures on devices where secure storage misbehaves.
+                android.util.Log.e("ApiCredentials", "storeHash failed", t);
                 error.setText("Could not store the credentials securely on this device.");
                 return;
             }
