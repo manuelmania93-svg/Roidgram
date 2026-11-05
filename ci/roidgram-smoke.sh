@@ -74,8 +74,31 @@ set_field() {
 }
 
 press_button() {
-  focus_node "$1"
-  adb shell input keyevent KEYCODE_ENTER
+  # No coordinate tap here: with the IME open the button is underneath it and a
+  # tap lands on a keyboard key, typing into the focused field. TAB-navigate
+  # from the current focus and ENTER the focused button instead.
+  for attempt in $(seq 1 8); do
+    adb shell input keyevent KEYCODE_TAB
+    sleep 1
+    adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+    adb pull /sdcard/ui.xml /tmp/ui.xml >/dev/null 2>&1
+    if grep -q "isn't responding" /tmp/ui.xml; then
+      XY=$(python3 "$DIR/boundsget.py" /tmp/ui.xml "wait") && adb shell input tap $XY
+      sleep 2
+      continue
+    fi
+    if python3 "$DIR/focuscheck.py" /tmp/ui.xml "$1"; then
+      adb shell input keyevent KEYCODE_ENTER
+      sleep 1
+      adb shell uiautomator dump /sdcard/ui.xml >/dev/null
+      adb pull /sdcard/ui.xml /tmp/ui-press.xml >/dev/null 2>&1 || true
+      return 0
+    fi
+  done
+  adb exec-out screencap -p > /tmp/field-fail.png || true
+  cp /tmp/ui.xml /tmp/field-fail.xml || true
+  echo "could not focus button '$1'"
+  exit 1
 }
 
 echo "== negative validation: bad hash rejected =="
@@ -86,7 +109,7 @@ sleep 2
 adb shell uiautomator dump /sdcard/ui.xml >/dev/null
 adb pull /sdcard/ui.xml /tmp/ui-invalid.xml >/dev/null 2>&1
 grep -q "32 hexadecimal" /tmp/ui-invalid.xml || { echo "validation error text not shown"; exit 1; }
-python3 "$DIR/fieldcheck.py" /tmp/ui-invalid.xml "123456" || { echo "api_id field lost its value during negative test"; exit 1; }
+python3 "$DIR/fieldcheck.py" /tmp/ui-invalid.xml "123456" || { adb exec-out screencap -p > /tmp/field-fail.png || true; cp /tmp/ui-invalid.xml /tmp/field-fail.xml; echo "api_id field lost its value during negative test"; exit 1; }
 python3 "$DIR/fieldcheck.py" /tmp/ui-invalid.xml "xyz" || { echo "bad hash never reached the hash field - negative test vacuous"; exit 1; }
 RESUMED=$(adb shell "dumpsys activity activities | grep ResumedActivity")
 echo "$RESUMED"

@@ -49,6 +49,8 @@ jobs:
             /tmp/field-fail.xml
             /tmp/touch-access-fail.png
             /tmp/touch-access-fail.xml
+            /tmp/ui-invalid.xml
+            /tmp/ui-press.xml
             /tmp/logcat.txt
             /tmp/logcat.txt
           if-no-files-found: warn
