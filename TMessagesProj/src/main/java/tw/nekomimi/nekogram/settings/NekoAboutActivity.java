@@ -26,6 +26,7 @@ import org.telegram.ui.ProfileActivity;
 import kotlin.Unit;
 import tw.nekomimi.nekogram.DatacenterActivity;
 import tw.nekomimi.nekogram.helpers.remote.UpdateHelper;
+import tw.nekomimi.nekogram.update.GithubUpdateUi;
 import tw.nekomimi.nekogram.ui.BottomBuilder;
 import tw.nekomimi.nekogram.ui.cells.HeaderCell;
 import tw.nekomimi.nekogram.utils.AndroidUtil;
@@ -185,7 +186,7 @@ public class NekoAboutActivity extends BaseNekoSettingsActivity {
         BottomBuilder builder = new BottomBuilder(getParentActivity());
         builder.addTitle(getString(R.string.CheckUpdate));
         builder.addItem(getString(R.string.CheckUpdate), R.drawable.msg_retry, (it) -> {
-            Browser.openUrl(getParentActivity(), "tg://update");
+            GithubUpdateUi.checkAndShow(getParentActivity());
             return Unit.INSTANCE;
         });
         builder.addItem(getString(R.string.AutoCheckUpdateSwitch) + " - " + getUpdateChannelDetail(), R.drawable.msg_channel, (it) -> {

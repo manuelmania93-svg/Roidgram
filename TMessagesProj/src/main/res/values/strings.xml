@@ -11634,4 +11634,6 @@
     <string name="NoPaidMessagesTokenUsed">un1 used your QR code and can message you for free</string>
     <string name="NoPaidMessagesTokenUsedOut">You used the QR code of un1 and can message them for free</string>
     <string name="NoPaidMessagesTokenImported">You can now message **%1$s** for free.</string>
+    <string name="RoidgramUpdateAvailableTitle">Update available</string>
+    <string name="RoidgramLatestVersion">You're on the latest version.</string>
 </resources>
