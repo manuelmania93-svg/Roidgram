@@ -38,10 +38,31 @@ jobs:
         run: pip install Cython==3.0.11
       - name: Configure Android SDK Path
         run: echo "sdk.dir=${ANDROID_HOME}" >> local.properties
+      - name: Restore stable signing key
+        env:
+          ROIDGRAM_KEYSTORE_BASE64: ${{ secrets.ROIDGRAM_KEYSTORE_BASE64 }}
+          ROIDGRAM_KEYSTORE_PASSWORD: ${{ secrets.ROIDGRAM_KEYSTORE_PASSWORD }}
+          ROIDGRAM_KEY_ALIAS: ${{ secrets.ROIDGRAM_KEY_ALIAS }}
+        run: |
+          test -n "$ROIDGRAM_KEYSTORE_BASE64" && test -n "$ROIDGRAM_KEYSTORE_PASSWORD" && test -n "$ROIDGRAM_KEY_ALIAS"
+          umask 077
+          printf '%s' "$ROIDGRAM_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/roidgram-signing.p12"
+          echo "ROIDGRAM_KEYSTORE_PATH=$RUNNER_TEMP/roidgram-signing.p12" >> "$GITHUB_ENV"
+          printf 'ROIDGRAM_KEYSTORE_PASSWORD=%s\n' "$ROIDGRAM_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          printf 'ROIDGRAM_KEY_ALIAS=%s\n' "$ROIDGRAM_KEY_ALIAS" >> "$GITHUB_ENV"
       - name: Unit tests (selection planner)
         run: ./gradlew TMessagesProj:testNormalStagingUnitTest --tests 'org.telegram.ui.SelectBetweenPlannerTest'
-      - name: Build (staging, debug-signed)
+      # versionCode is stamped from the run number so every published build is strictly
+      # newer than the last - the in-app updater compares versionCode, not versionName.
+      - name: Build (staging, stable-signed)
+        env:
+          ROIDGRAM_VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew TMessagesProj:assembleNormalStaging
+      - name: Publish-script fixture tests
+        run: bash .github/scripts/publish-release-test.sh
+      - name: Remove runner signing-key copy
+        if: always()
+        run: rm -f "$RUNNER_TEMP/roidgram-signing.p12"
       - uses: actions/upload-artifact@v4
         with:
           name: roidgram-staging
@@ -88,3 +109,42 @@ jobs:
             /tmp/setup-screen.png
             /tmp/logcat.txt
           if-no-files-found: warn
+
+  publish:
+    name: Publish release
+    # Gated automatic release on the exact main head. Merging to main still requires
+    # the user's explicit OK (standing rule); this job only runs after such a merge.
+    # Dispatch runs never publish. Nothing is ever deleted or overwritten
+    # (see .github/scripts/publish-release.sh gates).
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build, smoke]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    concurrency:
+      group: release-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      checks: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      BUILD_CHECK_NAME: Gradle Build
+      EXPECTED_CERT_SHA256: 6b718bd63aff2c39974ff0bcfbfd9ef315e2af4026c90062020beb1dc1880a0f
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "build-tools;36.0.0 platforms;android-36"
+      - uses: actions/download-artifact@v4
+        with:
+          name: roidgram-staging
+          path: apk
+      - name: Gate and publish
+        run: |
+          APK=$(find apk -name '*arm64*.apk' | head -1)
+          test -n "$APK"
+          bash .github/scripts/publish-release.sh "$APK"

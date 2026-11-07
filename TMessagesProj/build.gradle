@@ -45,7 +45,13 @@ idea {
 def buildTimestamp = System.getenv('BUILD_TIMESTAMP') ?: '0'
 def commitId = System.getenv('COMMIT_ID')
 def verName = "${APP_VERSION_NAME}${commitId?.take(7) ? "-${commitId.take(7)}" : ''}"
-def verCode = 1252
+// CI stamps versionCode from the Actions run number (ROIDGRAM_VERSION_CODE) so every
+// published build is strictly newer - the in-app updater compares versionCode, not
+// versionName. max() with the source floor matters: if run numbering ever resets, raising
+// this floor above the last published versionCode keeps updates flowing instead of
+// stalling below the installed base (installed builds carry code 1252).
+def stampedCode = (System.getenv('ROIDGRAM_VERSION_CODE') ?: '0') as int
+def verCode = Math.max(stampedCode, 1253)
 
 def officialVer = APP_VERSION_NAME
 def officialCode = APP_VERSION_CODE
@@ -239,9 +245,17 @@ android {
     }
 
     signingConfigs {
-        // Roidgram stock test builds: temporary debug signature only (user-approved).
-        // Upstream's release.keystore is removed from this repo and never used;
-        // a real release identity requires the user's explicit approval first.
+        // Upstream's release.keystore is removed from this repo and never used.
+        // When CI restores the stable key (repo secrets -> ROIDGRAM_KEYSTORE_* envs),
+        // staging builds are signed with it; local builds keep the debug key.
+        if (System.getenv('ROIDGRAM_KEYSTORE_PATH')) {
+            stable {
+                storeFile file(System.getenv('ROIDGRAM_KEYSTORE_PATH'))
+                storePassword System.getenv('ROIDGRAM_KEYSTORE_PASSWORD')
+                keyAlias System.getenv('ROIDGRAM_KEY_ALIAS')
+                keyPassword System.getenv('ROIDGRAM_KEYSTORE_PASSWORD')
+            }
+        }
     }
 
     buildTypes {
@@ -261,7 +275,7 @@ android {
             multiDexEnabled = true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             matchingFallbacks = ['release', 'staging', 'debug']
-            signingConfig = signingConfigs.debug
+            signingConfig = System.getenv('ROIDGRAM_KEYSTORE_PATH') ? signingConfigs.stable : signingConfigs.debug
         }
 
         release {
