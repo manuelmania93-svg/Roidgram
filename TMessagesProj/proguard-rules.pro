@@ -176,6 +176,14 @@
     public static void throw*(...);
 }
 
+# androidTest proof: androidx.test is compiled against a newer kotlin-stdlib and
+# calls Intrinsics.checkNotNullParameter at runtime; the assumenosideeffects rule
+# above lets R8 strip those unused members from the minified staging dex, crashing
+# the test process with NoSuchMethodError. Keep the members present.
+-keepclassmembers class kotlin.jvm.internal.Intrinsics {
+    *;
+}
+
 -assumenosideeffects class android.util.Log {
     public static *** v(...);
     public static *** d(...);
