@@ -133,25 +133,37 @@ public class GithubAppUpdateFlowTest {
     }
 
     /**
-     * API 29 quirk (8cloud run 42453757686): getPackageArchiveInfo can return
-     * signingInfo=null for a valid signed archive; verifyApk requests GET_SIGNATURES
-     * too and falls back to the legacy array. Pin that the legacy array is readable on
-     * this platform for the real fixture.
+     * API 29 quirk (8cloud run 42453757686, observed on that emulator image): archive
+     * parsing can return signingInfo=null for a valid signed APK, so verifyApk also
+     * requests GET_SIGNATURES and falls back to the legacy array. This pins the exact
+     * extraction path that fallback uses - legacy array of the fixture vs legacy array
+     * of the installed build - without assuming how this platform behaves.
      */
     @Test
-    public void legacySignaturesReadable() throws Exception {
+    public void legacySignerOfFixtureMatchesInstalled() throws Exception {
         useFixture("good");
         GithubAppUpdate.UpdateInfo info = GithubAppUpdate.fetchLatest();
         assertNotNull(info);
         File apk = GithubAppUpdate.download(ctx, info, null);
         PackageManager pm = ctx.getPackageManager();
         //noinspection deprecation
-        PackageInfo legacy = pm.getPackageArchiveInfo(apk.getAbsolutePath(), PackageManager.GET_SIGNATURES);
-        assertNotNull(legacy);
+        PackageInfo legacyApk = pm.getPackageArchiveInfo(apk.getAbsolutePath(), PackageManager.GET_SIGNATURES);
         //noinspection deprecation
-        assertNotNull("legacy signatures array null on this platform", legacy.signatures);
+        PackageInfo legacyOwn = pm.getPackageInfo(ctx.getPackageName(), PackageManager.GET_SIGNATURES);
+        assertNotNull(legacyApk);
+        assertNotNull(legacyOwn);
         //noinspection deprecation
-        assertTrue(legacy.signatures.length > 0);
+        assertNotNull("legacy signatures array null for fixture on this platform", legacyApk.signatures);
+        //noinspection deprecation
+        assertNotNull("legacy signatures array null for installed app on this platform", legacyOwn.signatures);
+        //noinspection deprecation
+        assertTrue(legacyApk.signatures.length > 0 && legacyOwn.signatures.length > 0);
+        //noinspection deprecation
+        byte[] a = java.security.MessageDigest.getInstance("SHA-256").digest(legacyApk.signatures[0].toByteArray());
+        //noinspection deprecation
+        byte[] b = java.security.MessageDigest.getInstance("SHA-256").digest(legacyOwn.signatures[0].toByteArray());
+        assertTrue("legacy-array signer of fixture B differs from installed app",
+                java.util.Arrays.equals(a, b));
         apk.delete();
     }
 
@@ -170,6 +182,13 @@ public class GithubAppUpdateFlowTest {
 
         assertTrue("real signed fixture B must verify", GithubAppUpdate.verifyApk(ctx, apk, info));
         assertTrue("verified APK must survive", apk.exists());
+
+        // Data-preservation marker: PostReplacementTest asserts this file after the
+        // real Roidgram-to-Roidgram replacement (same signature => data preserved).
+        File marker = new File(ctx.getFilesDir(), "updater-proof-marker.txt");
+        java.io.FileOutputStream fos = new java.io.FileOutputStream(marker);
+        fos.write("updater-proof-marker-v1".getBytes("UTF-8"));
+        fos.close();
 
         if (!GithubAppUpdate.canInstall(ctx)) {
             GithubAppUpdate.openUnknownSourcesSettings(ctx);

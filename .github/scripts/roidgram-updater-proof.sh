@@ -62,11 +62,29 @@ timeout 600 adb -s emulator-5554 shell am instrument -w -r \
 CTRL_RESULT=${PIPESTATUS[0]}
 echo "controller instrumentation exit=$CTRL_RESULT"
 
-# 3) Host-side truth: dumpsys must show fixture B after replacement.
+# 3) Host-side truth: dumpsys must show the real B build after replacement.
 echo '== host dumpsys assertion =='
 timeout 30 adb -s emulator-5554 shell dumpsys package app.roidgram | grep -m1 versionCode | tee "$EV/host-dumpsys.txt"
 grep -q "versionCode=$B_VC " "$EV/host-dumpsys.txt" || { echo "HOST ASSERT FAILED: versionCode != $B_VC"; exit 1; }
 
 [ "$APP_RESULT" -eq 0 ] || { echo "app suite failed"; exit 1; }
 [ "$CTRL_RESULT" -eq 0 ] || { echo "controller suite failed"; exit 1; }
+
+# 4) Post-replacement: data marker must survive and the real B build must launch.
+echo '== post-replacement suite =='
+timeout 300 adb -s emulator-5554 shell am instrument -w -r \
+  -e class tw.nekomimi.nekogram.update.PostReplacementTest \
+  -e expectedVersionCode "$B_VC" \
+  app.roidgram.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee "$EV/post-tests.log"
+POST_RESULT=${PIPESTATUS[0]}
+echo "post-replacement instrumentation exit=$POST_RESULT"
+
+# Real B launches: no crash on startup after the update (functionality smoke).
+timeout 30 adb -s emulator-5554 shell monkey -p app.roidgram -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1 || true
+sleep 25
+timeout 30 adb -s emulator-5554 exec-out screencap -p > "$EV/roidgram-post-update-launch.png" 2>/dev/null || true
+timeout 30 adb -s emulator-5554 logcat -d > "$EV/logcat-post-update.txt" 2>/dev/null || true
+if grep -q 'FATAL EXCEPTION' "$EV/logcat-post-update.txt"; then echo 'real B crashed on launch after update'; exit 1; fi
+
+[ "$POST_RESULT" -eq 0 ] || { echo "post-replacement suite failed"; exit 1; }
 echo 'UPDATER PROOF PASSED'
