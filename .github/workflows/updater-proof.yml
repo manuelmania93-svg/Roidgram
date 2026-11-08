@@ -167,13 +167,13 @@ jobs:
           BAPK=$(find app-b-apk -name '*x86_64*.apk' | head -1); [ -z "$BAPK" ] && BAPK=$(find app-b-apk -name '*universal*.apk' | head -1)
           [ -z "$BAPK" ] && { echo "no real B APK found"; exit 1; }
           cp "$BAPK" /tmp/roidgram-b.apk
-          TAPK=$(find test-apks -path '*androidTest/normal/staging*' -name '*.apk' | head -1)
+          TAPK=$(find test-apks -name '*staging-androidTest.apk' | head -1)
           [ -z "$TAPK" ] && { echo "no app androidTest APK found"; exit 1; }
           cp "$TAPK" /tmp/roidgram-test.apk
-          CAPP=$(find test-apks -path '*updater-controller/debug*' -name '*.apk' | head -1)
+          CAPP=$(find test-apks -name 'updater-controller-debug.apk' | head -1)
           [ -z "$CAPP" ] && { echo "no controller app APK found"; exit 1; }
           cp "$CAPP" /tmp/controller-app.apk
-          CAPK=$(find test-apks -path '*updater-controller/androidTest*' -name '*.apk' | head -1)
+          CAPK=$(find test-apks -name 'updater-controller-debug-androidTest.apk' | head -1)
           [ -z "$CAPK" ] && { echo "no controller androidTest APK found"; exit 1; }
           cp "$CAPK" /tmp/controller-test.apk
           ls -la /tmp/roidgram.apk /tmp/roidgram-test.apk /tmp/controller-app.apk /tmp/controller-test.apk
