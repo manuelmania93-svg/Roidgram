@@ -71,12 +71,37 @@ grep -q "versionCode=$B_VC " "$EV/host-dumpsys.txt" || { echo "HOST ASSERT FAILE
 [ "$CTRL_RESULT" -eq 0 ] || { echo "controller suite failed"; exit 1; }
 
 # 4) Post-replacement: data marker must survive and the real B build must launch.
+# On API 35 the package manager can stay briefly wedged after the session install
+# (run 42508708791: pm queries NameNotFound/hang right after dumpsys showed B).
+# Wait for the package to resolve before instrumenting, and retry the suite once
+# if the first attempt still times out.
 echo '== post-replacement suite =='
+for i in $(seq 1 30); do
+  if timeout 10 adb -s emulator-5554 shell pm path app.roidgram 2>/dev/null | grep -q 'package:'; then
+    echo "pm path ok after ${i} checks"; break
+  fi
+  sleep 2
+done
+timeout 10 adb -s emulator-5554 shell pm path app.roidgram | tee "$EV/pm-path-post.txt"
+grep -q 'package:' "$EV/pm-path-post.txt" || { echo 'package never resolvable after replacement'; exit 1; }
+
 timeout 300 adb -s emulator-5554 shell am instrument -w -r \
   -e class tw.nekomimi.nekogram.update.PostReplacementTest \
   -e expectedVersionCode "$B_VC" \
   app.roidgram.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee "$EV/post-tests.log"
 POST_RESULT=${PIPESTATUS[0]}
+if [ "$POST_RESULT" -eq 124 ]; then
+  echo 'post-replacement instrumentation timed out; retrying once after pm settle'
+  for i in $(seq 1 30); do
+    if timeout 10 adb -s emulator-5554 shell pm path app.roidgram 2>/dev/null | grep -q 'package:'; then break; fi
+    sleep 2
+  done
+  timeout 300 adb -s emulator-5554 shell am instrument -w -r \
+    -e class tw.nekomimi.nekogram.update.PostReplacementTest \
+    -e expectedVersionCode "$B_VC" \
+    app.roidgram.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee "$EV/post-tests-retry.log"
+  POST_RESULT=${PIPESTATUS[0]}
+fi
 echo "post-replacement instrumentation exit=$POST_RESULT"
 
 # Real B launches: no crash on startup after the update (functionality smoke).

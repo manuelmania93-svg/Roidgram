@@ -84,15 +84,26 @@ public class InstallControllerTest {
         shot(device, "roidgram-controller-post-replacement");
 
         // Signing cert of the replaced package must still be Roidgram's stable cert.
+        // On API 35 the package manager can briefly fail to resolve the package right
+        // after the session install even though dumpsys already reports fixture B
+        // (observed as NameNotFoundException in run 42508708791). Retry-tolerate it.
         PackageManager pm = InstrumentationRegistry.getInstrumentation().getTargetContext().getPackageManager();
-        PackageInfo info;
-        if (android.os.Build.VERSION.SDK_INT >= 33) {
-            info = pm.getPackageInfo(ROIDGRAM,
-                    PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES));
-        } else {
-            //noinspection deprecation
-            info = pm.getPackageInfo(ROIDGRAM, PackageManager.GET_SIGNING_CERTIFICATES);
+        PackageInfo info = null;
+        deadline = System.currentTimeMillis() + 60_000;
+        while (System.currentTimeMillis() < deadline && info == null) {
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 33) {
+                    info = pm.getPackageInfo(ROIDGRAM,
+                            PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES));
+                } else {
+                    //noinspection deprecation
+                    info = pm.getPackageInfo(ROIDGRAM, PackageManager.GET_SIGNING_CERTIFICATES);
+                }
+            } catch (PackageManager.NameNotFoundException transientGap) {
+                Thread.sleep(2_000);
+            }
         }
+        assertNotNull("package never resolvable after replacement", info);
         assertNotNull(info.signingInfo);
         android.content.pm.Signature[] signers = info.signingInfo.getApkContentsSigners();
         assertNotNull(signers);
