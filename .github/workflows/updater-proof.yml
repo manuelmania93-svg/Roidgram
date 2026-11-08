@@ -59,11 +59,13 @@ jobs:
       # B to 1253 and B would not be newer than A (run 42490044369).
       - name: Build staging app, its androidTest APK, and the controller APKs
         run: |
-          echo "ROIDGRAM_VERSION_CODE=$(( 900100 + ${{ github.run_number }} ))" >> "$GITHUB_ENV"
+          export ROIDGRAM_VERSION_CODE=$(( 900100 + ${{ github.run_number }} ))
           ./gradlew TMessagesProj:assembleNormalStaging \
             TMessagesProj:assembleNormalStagingAndroidTest \
             :updater-controller:assembleDebug \
             :updater-controller:assembleDebugAndroidTest
+          APK=$(find TMessagesProj/build/outputs/apk/normal/staging -name '*universal*.apk' | head -1)
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -1
       - name: Remove runner signing-key copy
         if: always()
         run: rm -f "$RUNNER_TEMP/roidgram-signing.p12"
@@ -119,8 +121,10 @@ jobs:
       # supports data-preservation and functionality claims.
       - name: Build staging app as fixture B
         run: |
-          echo "ROIDGRAM_VERSION_CODE=$(( 900101 + ${{ github.run_number }} ))" >> "$GITHUB_ENV"
+          export ROIDGRAM_VERSION_CODE=$(( 900101 + ${{ github.run_number }} ))
           ./gradlew TMessagesProj:assembleNormalStaging
+          APK=$(find TMessagesProj/build/outputs/apk/normal/staging -name '*universal*.apk' | head -1)
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$APK" | head -1
       - name: Remove runner signing-key copy
         if: always()
         run: rm -f "$RUNNER_TEMP/roidgram-signing.p12"
