@@ -7,6 +7,11 @@ name: Roidgram updater A-to-B proof
 # Roidgram's own test process.
 on:
   workflow_dispatch:
+  # Dispatch-by-API requires the workflow on the default branch; while this branch is
+  # under review the push trigger is what runs the proof.
+  push:
+    branches:
+      - feat/in-app-updater
 
 permissions:
   contents: read
