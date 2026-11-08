@@ -1,0 +1,25 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Updater proof controller: NOT part of the product. Its instrumentation test drives
+// the system package-installer sheet for Roidgram's A->B update and asserts the
+// replacement from PackageManager after Roidgram's own process is gone. Java only,
+// no kotlin plugin (an androidTest module without the kotlin plugin compiles .kt
+// tests to nothing and passes vacuously - 8cloud run 42455960836).
+android {
+    namespace 'app.roidgram.updatercontroller'
+
+    defaultConfig {
+        applicationId 'app.roidgram.updatercontroller'
+        minSdk 26
+        targetSdk 36
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+}
+
+dependencies {
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.3.0'
+}

@@ -1,0 +1,155 @@
+name: Roidgram updater A-to-B proof
+
+# Review-only verification: builds the staging app + instrumentation suites, proves the
+# in-app updater end to end on an emulator against LOCAL fixtures (fixture B is a
+# minimal APK signed with the same stable key), and publishes nothing. The final sheet
+# click is driven by a separate controller test app because replacing Roidgram kills
+# Roidgram's own test process.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_CERT_SHA256: 6b718bd63aff2c39974ff0bcfbfd9ef315e2af4026c90062020beb1dc1880a0f
+
+jobs:
+  build:
+    name: Build app + test APKs
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "build-tools;36.0.0 ndk;27.2.12479018 platforms;android-36"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11.9'
+      - name: Install Cython (Chaquopy bridge source build)
+        run: pip install Cython==3.0.11
+      - name: Configure Android SDK Path
+        run: echo "sdk.dir=${ANDROID_HOME}" >> local.properties
+      - name: Restore stable signing key
+        env:
+          ROIDGRAM_KEYSTORE_BASE64: ${{ secrets.ROIDGRAM_KEYSTORE_BASE64 }}
+          ROIDGRAM_KEYSTORE_PASSWORD: ${{ secrets.ROIDGRAM_KEYSTORE_PASSWORD }}
+          ROIDGRAM_KEY_ALIAS: ${{ secrets.ROIDGRAM_KEY_ALIAS }}
+        run: |
+          test -n "$ROIDGRAM_KEYSTORE_BASE64" && test -n "$ROIDGRAM_KEYSTORE_PASSWORD" && test -n "$ROIDGRAM_KEY_ALIAS"
+          umask 077
+          printf '%s' "$ROIDGRAM_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/roidgram-signing.p12"
+          echo "ROIDGRAM_KEYSTORE_PATH=$RUNNER_TEMP/roidgram-signing.p12" >> "$GITHUB_ENV"
+          printf 'ROIDGRAM_KEYSTORE_PASSWORD=%s\n' "$ROIDGRAM_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+          printf 'ROIDGRAM_KEY_ALIAS=%s\n' "$ROIDGRAM_KEY_ALIAS" >> "$GITHUB_ENV"
+      # versionCode stamped from the run number, same as roidgram-build, so A is a
+      # plausible production build; the fixture generator stamps B = A + 1.
+      - name: Build staging app, its androidTest APK, and the controller APKs
+        env:
+          ROIDGRAM_VERSION_CODE: ${{ github.run_number }}
+        run: >-
+          ./gradlew TMessagesProj:assembleNormalStaging
+          TMessagesProj:assembleNormalStagingAndroidTest
+          :updater-controller:assembleDebug
+          :updater-controller:assembleDebugAndroidTest
+      - name: Remove runner signing-key copy
+        if: always()
+        run: rm -f "$RUNNER_TEMP/roidgram-signing.p12"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proof-app-apk
+          path: TMessagesProj/build/outputs/apk/normal/staging/
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: proof-test-apks
+          path: |
+            TMessagesProj/build/outputs/apk/androidTest/normal/staging/
+            updater-controller/build/outputs/apk/
+          if-no-files-found: error
+
+  proof:
+    name: A-to-B proof (API ${{ matrix.api }})
+    needs: build
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [29, 35]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: "build-tools;36.0.0 platforms;android-36"
+      - uses: actions/download-artifact@v4
+        with:
+          name: proof-app-apk
+          path: app-apk
+      - uses: actions/download-artifact@v4
+        with:
+          name: proof-test-apks
+          path: test-apks
+      - name: Stage APKs at absolute paths
+        run: |
+          APK=$(find app-apk -name '*x86_64*.apk' | head -1); [ -z "$APK" ] && APK=$(find app-apk -name '*universal*.apk' | head -1)
+          [ -z "$APK" ] && { echo "no app APK found"; exit 1; }
+          cp "$APK" /tmp/roidgram.apk
+          TAPK=$(find test-apks -path '*androidTest/normal/staging*' -name '*.apk' | head -1)
+          [ -z "$TAPK" ] && { echo "no app androidTest APK found"; exit 1; }
+          cp "$TAPK" /tmp/roidgram-test.apk
+          CAPP=$(find test-apks -path '*updater-controller/debug*' -name '*.apk' | head -1)
+          [ -z "$CAPP" ] && { echo "no controller app APK found"; exit 1; }
+          cp "$CAPP" /tmp/controller-app.apk
+          CAPK=$(find test-apks -path '*updater-controller/androidTest*' -name '*.apk' | head -1)
+          [ -z "$CAPK" ] && { echo "no controller androidTest APK found"; exit 1; }
+          cp "$CAPK" /tmp/controller-test.apk
+          ls -la /tmp/roidgram.apk /tmp/roidgram-test.apk /tmp/controller-app.apk /tmp/controller-test.apk
+      - name: Build A-to-B fixtures (B signed with the same stable key)
+        env:
+          ROIDGRAM_KEYSTORE_BASE64: ${{ secrets.ROIDGRAM_KEYSTORE_BASE64 }}
+          ROIDGRAM_KEYSTORE_PASSWORD: ${{ secrets.ROIDGRAM_KEYSTORE_PASSWORD }}
+          ROIDGRAM_KEY_ALIAS: ${{ secrets.ROIDGRAM_KEY_ALIAS }}
+        run: |
+          test -n "$ROIDGRAM_KEYSTORE_BASE64"
+          umask 077
+          KS="$RUNNER_TEMP/roidgram-signing.p12"
+          printf '%s' "$ROIDGRAM_KEYSTORE_BASE64" | base64 --decode > "$KS"
+          mkdir -p /tmp/fixtures
+          APP_APK=/tmp/roidgram.apk KS="$KS" KS_PASS="$ROIDGRAM_KEYSTORE_PASSWORD" \
+            KS_ALIAS="$ROIDGRAM_KEY_ALIAS" OUT=/tmp/fixtures ANDROID_HOME="$ANDROID_HOME" \
+            bash .github/scripts/roidgram-make-fixtures.sh
+          rm -f "$KS"
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api }}
+          target: google_apis
+          arch: x86_64
+          script: >-
+            APP_APK=/tmp/roidgram.apk APP_TEST_APK=/tmp/roidgram-test.apk
+            CONTROLLER_APP_APK=/tmp/controller-app.apk
+            CONTROLLER_TEST_APK=/tmp/controller-test.apk
+            FIXTURE_DIR=/tmp/fixtures EVIDENCE_DIR=/tmp/updater-evidence
+            EXPECTED_CERT_SHA256=$EXPECTED_CERT_SHA256
+            bash "$GITHUB_WORKSPACE/.github/scripts/roidgram-updater-proof.sh"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: updater-proof-evidence-api${{ matrix.api }}
+          path: /tmp/updater-evidence/
+          if-no-files-found: warn

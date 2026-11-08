@@ -263,3 +263,7 @@
 -keep class ru.noties.jlatexmath.** { *; }
 -dontwarn org.scilab.forge.jlatexmath.**
 -keep class org.telegram.tgnet.** { *; }
+
+# Updater proof: the instrumentation suite calls GithubAppUpdate by name; the updater
+# is small and security-sensitive, so keep it unobfuscated in minified builds.
+-keep class tw.nekomimi.nekogram.update.** { *; }

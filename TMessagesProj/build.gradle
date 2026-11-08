@@ -191,6 +191,12 @@ android {
         versionName verName
         versionCode verCode
 
+        // Updater proof: the instrumentation suite runs against the staging variant
+        // (stable-signed, minified) so the A->B replacement check exercises the exact
+        // production shape; updater classes are kept by name in proguard-rules.pro.
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        testBuildType "staging"
+
         // obtain your own keys at https://core.telegram.org/api/obtaining_api_id
         def appId = '6'
         def appHash = 'eb06d4abfb49dc3eeb1aeb98ae0f581e'
@@ -620,6 +626,9 @@ dependencies {
     implementation 'com.android.billingclient:billing:8.0.0'
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs_nio:2.1.5'
     testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.3.0'
 
     // kotlin
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'

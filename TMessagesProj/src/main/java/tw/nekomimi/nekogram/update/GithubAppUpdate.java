@@ -61,6 +61,11 @@ public final class GithubAppUpdate {
     static final String MANIFEST_ASSET_NAME = "roidgram-update.json";
     private static final String RELEASE_DOWNLOAD_PREFIX =
             "https://github.com/manuelmania93-svg/Roidgram/releases/download/";
+
+    // Instrumentation hooks (package-visible, set only by androidTest in the app
+    // process): point the check at a local fixture server instead of the live release.
+    static String latestReleaseUrlOverride = null;
+    static String allowedApkUrlPrefixOverride = null;
     private static final int CONNECT_TIMEOUT_MS = 10_000;
     private static final int READ_TIMEOUT_MS = 15_000;
 
@@ -115,7 +120,8 @@ public final class GithubAppUpdate {
             String versionName = obj.getString("versionName");
             String apkUrl = obj.getString("apkUrl");
             String sha256 = obj.getString("sha256");
-            if (!apkUrl.startsWith(RELEASE_DOWNLOAD_PREFIX)) return null;
+            String prefix = allowedApkUrlPrefixOverride != null ? allowedApkUrlPrefixOverride : RELEASE_DOWNLOAD_PREFIX;
+            if (!apkUrl.startsWith(prefix)) return null;
             if (!sha256.matches("[0-9a-fA-F]{64}")) return null;
             String notes = obj.optString("notes", null);
             return new UpdateInfo(versionCode, versionName, apkUrl, sha256.toLowerCase(), notes);
@@ -127,7 +133,8 @@ public final class GithubAppUpdate {
     /** Latest published release manifest, or null when none exists or the fetch fails. */
     public static UpdateInfo fetchLatest() {
         try {
-            String manifestUrl = findAssetUrl(get(LATEST_RELEASE_URL), MANIFEST_ASSET_NAME);
+            String releaseUrl = latestReleaseUrlOverride != null ? latestReleaseUrlOverride : LATEST_RELEASE_URL;
+            String manifestUrl = findAssetUrl(get(releaseUrl), MANIFEST_ASSET_NAME);
             if (manifestUrl == null) return null;
             return parseManifest(get(manifestUrl));
         } catch (Exception e) {
@@ -193,12 +200,16 @@ public final class GithubAppUpdate {
 
     private static PackageInfo packageInfo(PackageManager pm, String packageName) {
         try {
+            // Request the legacy GET_SIGNATURES alongside GET_SIGNING_CERTIFICATES: on
+            // API 29 emulators getPackageArchiveInfo can return signingInfo=null for a
+            // valid v1+v2 signed archive (proven on the 8cloud CI emulator), and the
+            // legacy signatures array is the fallback then.
             if (Build.VERSION.SDK_INT >= 33) {
                 return pm.getPackageInfo(packageName,
-                        PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES));
+                        PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES | PackageManager.GET_SIGNATURES));
             }
             //noinspection deprecation
-            return pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES);
+            return pm.getPackageInfo(packageName, PackageManager.GET_SIGNING_CERTIFICATES | PackageManager.GET_SIGNATURES);
         } catch (Exception e) {
             return null;
         }
@@ -206,7 +217,14 @@ public final class GithubAppUpdate {
 
     private static byte[] signerSha256(PackageInfo info) {
         try {
-            android.content.pm.Signature[] signers = info.signingInfo.getApkContentsSigners();
+            android.content.pm.Signature[] signers = null;
+            if (info.signingInfo != null) {
+                signers = info.signingInfo.getApkContentsSigners();
+            }
+            if ((signers == null || signers.length == 0) && info.signatures != null && info.signatures.length > 0) {
+                //noinspection deprecation
+                signers = info.signatures;
+            }
             if (signers == null || signers.length == 0) return null;
             return MessageDigest.getInstance("SHA-256").digest(signers[0].toByteArray());
         } catch (Exception e) {
@@ -228,11 +246,14 @@ public final class GithubAppUpdate {
         try {
             if (!sha256Hex(apk).equalsIgnoreCase(info.sha256)) return false;
             PackageManager pm = context.getPackageManager();
-            PackageInfo apkInfo = Build.VERSION.SDK_INT >= 33
-                    ? pm.getPackageArchiveInfo(apk.getAbsolutePath(),
-                            PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES))
-                    //noinspection deprecation
-                    : pm.getPackageArchiveInfo(apk.getAbsolutePath(), PackageManager.GET_SIGNING_CERTIFICATES);
+            PackageInfo apkInfo;
+            if (Build.VERSION.SDK_INT >= 33) {
+                apkInfo = pm.getPackageArchiveInfo(apk.getAbsolutePath(),
+                        PackageManager.PackageInfoFlags.of(PackageManager.GET_SIGNING_CERTIFICATES | PackageManager.GET_SIGNATURES));
+            } else {
+                //noinspection deprecation
+                apkInfo = pm.getPackageArchiveInfo(apk.getAbsolutePath(), PackageManager.GET_SIGNING_CERTIFICATES | PackageManager.GET_SIGNATURES);
+            }
             if (apkInfo == null) return false;
             if (!context.getPackageName().equals(apkInfo.packageName)) return false;
             if (packageVersionCode(apkInfo) <= currentVersionCode()) return false;

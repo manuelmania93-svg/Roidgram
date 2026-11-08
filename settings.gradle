@@ -18,6 +18,10 @@ plugins {
 
 include ':TMessagesProj'
 
+// Updater proof: separate tiny test app that clicks the system install sheet and
+// asserts the A->B replacement after Roidgram's own process is replaced.
+include ':updater-controller'
+
 dependencyResolutionManagement {
     repositories {
         google()
