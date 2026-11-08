@@ -177,12 +177,12 @@
 }
 
 # androidTest proof: androidx.test is compiled against a newer kotlin-stdlib and
-# calls Intrinsics.checkNotNullParameter at runtime; the assumenosideeffects rule
-# above lets R8 strip those unused members from the minified staging dex, crashing
-# the test process with NoSuchMethodError. Keep the members present.
--keepclassmembers class kotlin.jvm.internal.Intrinsics {
-    *;
-}
+# calls into kotlin runtime classes at runtime (Intrinsics.checkNotNullParameter,
+# kotlin.LazyKt, ...). Minification strips unused kotlin classes/members from the
+# staging dex, and the test APK resolves them against the app's classloader, so the
+# test process crashes before running any test. Keep the whole kotlin runtime in
+# staging builds; app call pruning via assumenosideeffects above is unchanged.
+-keep class kotlin.** { *; }
 
 -assumenosideeffects class android.util.Log {
     public static *** v(...);
