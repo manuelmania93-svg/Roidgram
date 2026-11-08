@@ -54,16 +54,16 @@ jobs:
           echo "ROIDGRAM_KEYSTORE_PATH=$RUNNER_TEMP/roidgram-signing.p12" >> "$GITHUB_ENV"
           printf 'ROIDGRAM_KEYSTORE_PASSWORD=%s\n' "$ROIDGRAM_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
           printf 'ROIDGRAM_KEY_ALIAS=%s\n' "$ROIDGRAM_KEY_ALIAS" >> "$GITHUB_ENV"
-      # versionCode stamped from the run number, same as roidgram-build, so A is a
-      # plausible production build; the fixture generator stamps B = A + 1.
+      # Proof builds carry explicit version codes ABOVE the source floor (1253): this
+      # workflow's own run_number is small, so stamping from it would floor both A and
+      # B to 1253 and B would not be newer than A (run 42490044369).
       - name: Build staging app, its androidTest APK, and the controller APKs
-        env:
-          ROIDGRAM_VERSION_CODE: ${{ github.run_number }}
-        run: >-
-          ./gradlew TMessagesProj:assembleNormalStaging
-          TMessagesProj:assembleNormalStagingAndroidTest
-          :updater-controller:assembleDebug
-          :updater-controller:assembleDebugAndroidTest
+        run: |
+          echo "ROIDGRAM_VERSION_CODE=$(( 900100 + ${{ github.run_number }} ))" >> "$GITHUB_ENV"
+          ./gradlew TMessagesProj:assembleNormalStaging \
+            TMessagesProj:assembleNormalStagingAndroidTest \
+            :updater-controller:assembleDebug \
+            :updater-controller:assembleDebugAndroidTest
       - name: Remove runner signing-key copy
         if: always()
         run: rm -f "$RUNNER_TEMP/roidgram-signing.p12"
@@ -119,7 +119,7 @@ jobs:
       # supports data-preservation and functionality claims.
       - name: Build staging app as fixture B
         run: |
-          echo "ROIDGRAM_VERSION_CODE=$(( ${{ github.run_number }} + 1 ))" >> "$GITHUB_ENV"
+          echo "ROIDGRAM_VERSION_CODE=$(( 900101 + ${{ github.run_number }} ))" >> "$GITHUB_ENV"
           ./gradlew TMessagesProj:assembleNormalStaging
       - name: Remove runner signing-key copy
         if: always()
